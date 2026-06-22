@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>⛳ 골프 라운드 앱 (클라우드)</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Noto Sans KR',-apple-system,sans-serif; background:linear-gradient(135deg,#1e3c72,#2a5298); min-height:100vh; padding:15px; }
+.container { max-width:1100px; margin:0 auto; }
+.header { text-align:center; color:white; margin-bottom:14px; }
+.header h1 { font-size:1.8em; margin-bottom:6px; }
+.header p { opacity:0.9; font-size:0.9em; }
+.cloud-status { display:inline-block; padding:4px 12px; border-radius:20px; font-size:0.8em; margin-top:8px; }
+.cloud-on { background:#d4edda; color:#155724; }
+.cloud-off { background:#f8d7da; color:#721c24; }
+.cloud-sync { background:#fff3cd; color:#856404; }
+.card { background:white; border-radius:12px; padding:24px; margin-bottom:18px; box-shadow:0 4px 20px rgba(0,0,0,0.2); }
+.section-title { font-size:1.3em; color:#1e3c72; margin-bottom:18px; padding-bottom:10px; border-bottom:3px solid #2a5298; }
+.input-field { display:flex; flex-direction:column; margin-bottom:14px; }
+.input-field label { font-weight:600; color:#333; margin-bottom:6px; font-size:0.9em; }
+.input-field input, .input-field select, .input-field textarea { padding:10px; border:2px solid #e0e0e0; border-radius:6px; font-family:inherit; font-size:1em; }
+.input-field input:focus, .input-field select:focus, .input-field textarea:focus { outline:none; border-color:#2a5298; }
+.input-group { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin-bottom:14px; }
+.btn { padding:12px 20px; border:none; border-radius:6px; font-size:1em; font-weight:600; cursor:pointer; transition:all 0.2s; }
+.btn-primary { background:linear-gradient(135deg,#2a5298,#1e3c72); color:white; }
+.btn-success { background:linear-gradient(135deg,#11998e,#38ef7d); color:white; }
+.btn-secondary { background:#f0f0f0; color:#333; border:2px solid #ccc; }
+.btn-danger { background:#fee; color:#c00; border:2px solid #fcc; }
+.btn:hover { transform:translateY(-2px); box-shadow:0 4px 12px rgba(0,0,0,0.2); }
+.btn-full { width:100%; }
+.button-group { display:flex; gap:10px; margin-top:18px; flex-wrap:wrap; }
+.button-group .btn { flex:1; min-width:130px; }
+.view { display:none; }
+.view.active { display:block; }
+.back-btn { color:#fff; font-weight:600; cursor:pointer; margin-bottom:14px; display:inline-block; background:rgba(255,255,255,0.15); padding:8px 16px; border-radius:6px; }
+.course-card { background:#f8fbff; border:3px solid #e0e0e0; border-radius:8px; padding:18px; margin-bottom:12px; }
+.course-card h3 { color:#1e3c72; margin-bottom:6px; }
+.course-card p { color:#666; font-size:0.88em; }
+.hole-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; }
+.hole-card { background:#f8fbff; border:2px solid #2a5298; border-radius:8px; padding:14px; }
+.hole-number { font-weight:bold; color:#2a5298; margin-bottom:8px; }
+.hole-input { margin-bottom:8px; }
+.hole-input label { font-size:0.78em; color:#666; display:block; margin-bottom:3px; }
+.hole-input input, .hole-input select, .hole-input textarea { width:100%; padding:6px; border:1px solid #ddd; border-radius:4px; font-size:0.9em; font-family:inherit; }
+.score-input { font-size:1.2em !important; text-align:center; font-weight:bold; border:2px solid #2a5298 !important; }
+.nine-title { background:#e8f0ff; padding:12px; border-left:5px solid #2a5298; margin:20px 0 14px; border-radius:4px; font-weight:600; color:#1e3c72; }
+.score-summary { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:12px; margin-bottom:20px; }
+.score-box { background:linear-gradient(135deg,#2a5298,#1e3c72); color:white; padding:18px; border-radius:8px; text-align:center; }
+.score-number { font-size:2em; font-weight:bold; }
+.score-label { font-size:0.85em; opacity:0.9; margin-top:4px; }
+.code-display { background:#1e1e1e; color:#0f0; padding:16px; border-radius:6px; overflow:auto; max-height:350px; font-family:monospace; font-size:0.8em; margin:16px 0; white-space:pre-wrap; word-break:break-all; }
+.success-msg { background:#e8f5e9; color:#2e7d32; padding:14px; border-radius:6px; margin-bottom:16px; border-left:5px solid #4caf50; }
+.info-msg { background:#fff9e6; color:#856404; padding:14px; border-radius:6px; margin-bottom:16px; border-left:5px solid #ffc107; font-size:0.9em; }
+.hole-edit-row { display:grid; grid-template-columns:50px 1fr 1fr; gap:8px; align-items:center; margin-bottom:8px; padding:8px; background:#f8fbff; border-radius:6px; }
+.hole-edit-row span { font-weight:bold; color:#2a5298; }
+.hole-edit-row input, .hole-edit-row select { padding:6px; border:1px solid #ddd; border-radius:4px; font-size:0.85em; }
+.map-upload-cell { grid-column:1/-1; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.map-upload-cell label.upbtn { background:#2a5298; color:#fff; padding:7px 14px; border-radius:6px; cursor:pointer; font-size:0.82em; font-weight:600; }
+.map-upload-cell img { height:50px; border-radius:4px; border:1px solid #ccc; }
+.map-upload-cell .clearmap { color:#c00; cursor:pointer; font-size:0.8em; }
+.spinner { text-align:center; padding:40px; color:#fff; font-size:1.1em; }
+@media(max-width:768px){ .header h1{font-size:1.5em;} .hole-grid{grid-template-columns:1fr;} .button-group{flex-direction:column;} .hole-edit-row{grid-template-columns:40px 1fr 1fr;} }
+</style>
+</head>
+<body>
+<div class="container">
+<div class="header">
+  <h1>⛳ 골프 라운드 앱</h1>
+  <p>PC·폰 어디서나 같은 데이터 · 클라우드 자동 저장</p>
+  <div id="cloudStatus" class="cloud-status cloud-sync">☁️ 연결 중...</div>
+  <div style="margin-top:10px;"><button onclick="diagnose()" style="background:#fff;color:#1e3c72;border:none;padding:6px 14px;border-radius:20px;font-size:0.8em;font-weight:600;cursor:pointer;">🔍 연결 진단하기</button></div>
+  <div id="diagResult" style="margin-top:10px; color:#fff; font-size:0.82em; background:rgba(0,0,0,0.25); padding:10px; border-radius:8px; display:none; text-align:left; white-space:pre-wrap;"></div>
+</div>
+
+<div id="loadingView" class="view active">
+  <div class="spinner">☁️ 클라우드에서 코스를 불러오는 중...</div>
+</div>
+
+<!-- 대시보드 -->
+<div id="dashboardView" class="view">
+  <div class="card">
+    <h2 class="section-title">📍 내 코스 목록</h2>
+    <div id="courseList"></div>
+    <div class="button-group"><button class="btn btn-primary" onclick="openAddCourse()">+ 새 코스 추가</button></div>
+  </div>
+</div>
+
+<!-- 코스 추가/수정 -->
+<div id="courseEditView" class="view">
+  <span class="back-btn" onclick="show('dashboardView')">← 대시보드</span>
+  <div class="card">
+    <h2 class="section-title" id="courseEditTitle">새 코스 추가</h2>
+    <div class="info-msg">💡 홀맵 스크린샷을 올리면 클라우드에 저장돼요. PC에서 올리면 폰에서도 그대로 보입니다.</div>
+    <div class="input-group">
+      <div class="input-field"><label>코스명</label><input type="text" id="newCourseName" placeholder="예: 엘리시안강촌 레이크코스"></div>
+      <div class="input-field"><label>홀 수</label>
+        <select id="newCourseHoleCount" onchange="renderHoleEditor()">
+          <option value="9">9홀</option><option value="18" selected>18홀</option>
+        </select>
+      </div>
+    </div>
+    <h3 style="color:#1e3c72; margin:18px 0 12px;">홀별 정보</h3>
+    <div id="holeEditor"></div>
+    <div class="button-group">
+      <button class="btn btn-success" onclick="saveCourse()">💾 클라우드에 저장</button>
+      <button class="btn btn-secondary" onclick="show('dashboardView')">취소</button>
+    </div>
+  </div>
+</div>
+
+<!-- 라운드 준비 -->
+<div id="prepView" class="view">
+  <span class="back-btn" onclick="show('dashboardView')">← 대시보드</span>
+  <div class="card">
+    <h2 class="section-title">📋 라운드 준비</h2>
+    <div class="input-group">
+      <div class="input-field"><label>코스명</label><input type="text" id="r_courseName" readonly style="background:#f0f0f0;"></div>
+      <div class="input-field"><label>날짜</label><input type="date" id="r_date"></div>
+      <div class="input-field"><label>날씨</label><input type="text" id="r_weather" value="맑음"></div>
+      <div class="input-field"><label>기온</label><input type="text" id="r_temp" value="28°C"></div>
+    </div>
+    <div class="input-group">
+      <div class="input-field"><label>전반구 코스명</label><input type="text" id="r_front9" placeholder="예: 레이크코스"></div>
+      <div class="input-field"><label>후반구 코스명</label><input type="text" id="r_back9" placeholder="예: 힐코스"></div>
+      <div class="input-field"><label>그린스피드</label><input type="text" id="r_greenspeed" placeholder="예: 14.5"></div>
+    </div>
+    <h3 style="color:#1e3c72; margin:18px 0 12px;">🎯 각 홀 목표</h3>
+    <div class="hole-grid" id="prepGrid"></div>
+    <div class="button-group"><button class="btn btn-success" onclick="goInput()">✓ 라운드 시작</button></div>
+  </div>
+</div>
+
+<!-- 라운드 중 -->
+<div id="inputView" class="view">
+  <span class="back-btn" onclick="show('prepView')">← 라운드 준비</span>
+  <div class="card">
+    <h2 class="section-title">📊 라운드 중: 스코어</h2>
+    <div class="score-summary">
+      <div class="score-box"><div class="score-number" id="liveTotal">-</div><div class="score-label">합계</div></div>
+      <div class="score-box"><div class="score-number" id="liveVsPar">-</div><div class="score-label">vs Par</div></div>
+    </div>
+    <div id="inputGrid"></div>
+    <div class="button-group"><button class="btn btn-success" onclick="goPost()">✓ 라운드 완료</button></div>
+  </div>
+</div>
+
+<!-- 라운드 후 -->
+<div id="postView" class="view">
+  <span class="back-btn" onclick="show('inputView')">← 라운드 입력</span>
+  <div class="card">
+    <h2 class="section-title">📝 라운드 후: 상세 기록</h2>
+    <div id="postGrid"></div>
+    <h2 class="section-title" style="margin-top:24px;">📸 미디어</h2>
+    <div class="input-field"><label>🎬 라운드 영상 (유튜브 링크)</label><input type="text" id="m_video" placeholder="https://youtube.com/watch?v=..."></div>
+    <div class="input-field"><label>📸 사진 URL (한 줄에 하나씩)</label><textarea id="m_photos" rows="4" placeholder="https://.../photo1.jpg"></textarea></div>
+    <h2 class="section-title" style="margin-top:24px;">💭 회고</h2>
+    <div class="input-field"><textarea id="m_notes" rows="5" placeholder="라운드 회고, 느낀 점, 다음 목표..."></textarea></div>
+    <div class="button-group"><button class="btn btn-success" onclick="goExport()">✓ 블로그 포스트 생성</button></div>
+  </div>
+</div>
+
+<!-- 내보내기 -->
+<div id="exportView" class="view">
+  <span class="back-btn" onclick="show('postView')">← 라운드 후 기록</span>
+  <div class="card">
+    <h2 class="section-title">📱 블로그 포스트 완성</h2>
+    <div class="success-msg">✅ 아래 코드 복사 → 네이버 블로그/티스토리 → 새글 → HTML 편집 → 붙여넣기 → 발행</div>
+    <div class="code-display" id="codeOut"></div>
+    <div class="button-group">
+      <button class="btn btn-primary" onclick="copyCode()">📋 HTML 코드 복사</button>
+      <button class="btn btn-secondary" onclick="show('dashboardView')">새 라운드</button>
+    </div>
+    <div id="copyMsg" class="success-msg" style="display:none; margin-top:14px;">✅ 복사되었습니다!</div>
+  </div>
+</div>
+
+</div>
+
+<script>
+// ===== Supabase 연결 =====
+const SUPABASE_URL = 'https://okscfgttlckufpzfqwcs.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_cgJc4XV1iHQlUvxNR7iysQ_Q-5wSmev';
+let sb = null;
+
+function initSupabase() {
+  // 라이브러리가 로드될 때까지 대기
+  if (typeof supabase === 'undefined' || !supabase.createClient) {
+    setStatus('sync','☁️ 라이브러리 로딩 중...');
+    setTimeout(initSupabase, 300);
+    return;
+  }
+  sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  initSupabase();
+}
+
+const CLUBS = ['DR','3W','HY','5i','6i','7i','8i','9i','PW','52','56','PT'];
+const SEED = [{"id":"1","name":"Solmoro CC","holes":[{"number":1,"par":4,"dist":""},{"number":2,"par":4,"dist":""},{"number":3,"par":3,"dist":""},{"number":4,"par":5,"dist":""},{"number":5,"par":4,"dist":""},{"number":6,"par":3,"dist":""},{"number":7,"par":4,"dist":""},{"number":8,"par":5,"dist":""},{"number":9,"par":4,"dist":""},{"number":10,"par":4,"dist":""},{"number":11,"par":4,"dist":""},{"number":12,"par":3,"dist":""},{"number":13,"par":5,"dist":""},{"number":14,"par":4,"dist":""},{"number":15,"par":3,"dist":""},{"number":16,"par":4,"dist":""},{"number":17,"par":5,"dist":""},{"number":18,"par":4,"dist":""}]},{"id":"2","name":"엘리시안 강촌cc 레이크코스","holes":[{"number":1,"par":4,"dist":"310"},{"number":2,"par":5,"dist":"402"},{"number":3,"par":3,"dist":"130"},{"number":4,"par":4,"dist":"255"},{"number":5,"par":4,"dist":"122"},{"number":6,"par":5,"dist":"390"},{"number":7,"par":3,"dist":"93"},{"number":8,"par":5,"dist":"415"},{"number":9,"par":4,"dist":"338"}]},{"id":"3","name":"엘리시안 제주cc 레이크 코스","holes":[{"number":1,"par":5,"dist":"408"},{"number":2,"par":4,"dist":"296"},{"number":3,"par":3,"dist":"127"},{"number":4,"par":4,"dist":"270"},{"number":5,"par":4,"dist":"305"},{"number":6,"par":3,"dist":"382"},{"number":7,"par":3,"dist":"97"},{"number":8,"par":4,"dist":"285"},{"number":9,"par":4,"dist":"300"}]},{"id":"4","name":"엘리시안 강촌cc 힐코스","holes":[{"number":1,"par":4,"dist":"235"},{"number":2,"par":5,"dist":"370"},{"number":3,"par":4,"dist":"270"},{"number":4,"par":3,"dist":"105"},{"number":5,"par":4,"dist":"285"},{"number":6,"par":4,"dist":"280"},{"number":7,"par":5,"dist":"375"},{"number":8,"par":3,"dist":"111"},{"number":9,"par":4,"dist":"301"}]},{"id":"5","name":"스카이 밸리cc 스카이코스","holes":[{"number":1,"par":4,"dist":"326"},{"number":2,"par":5,"dist":"461"},{"number":3,"par":4,"dist":"299"},{"number":4,"par":3,"dist":"128"},{"number":5,"par":5,"dist":"396"},{"number":6,"par":4,"dist":"289"},{"number":7,"par":3,"dist":"120"},{"number":8,"par":4,"dist":"373"},{"number":9,"par":4,"dist":"350"}]},{"id":"6","name":"스카이 밸리cc 밸리코스","holes":[{"number":1,"par":4,"dist":"303"},{"number":2,"par":5,"dist":"454"},{"number":3,"par":3,"dist":"141"},{"number":4,"par":4,"dist":"322"},{"number":5,"par":4,"dist":"356"},{"number":6,"par":4,"dist":"317"},{"number":7,"par":3,"dist":"109"},{"number":8,"par":5,"dist":"426"},{"number":9,"par":4,"dist":"329"}]},{"id":"7","name":"H1cc 레이크 코스","holes":[{"number":1,"par":4,"dist":"304"},{"number":2,"par":5,"dist":"396"},{"number":3,"par":3,"dist":"249"},{"number":4,"par":5,"dist":"287"},{"number":5,"par":4,"dist":"125"},{"number":6,"par":3,"dist":"246"},{"number":7,"par":4,"dist":"452"},{"number":8,"par":5,"dist":"94"},{"number":9,"par":4,"dist":"256"}]},{"id":"8","name":"H1cc 마운틴 코스","holes":[{"number":1,"par":4,"dist":"246"},{"number":2,"par":4,"dist":"252"},{"number":3,"par":4,"dist":"270"},{"number":4,"par":4,"dist":"242"},{"number":5,"par":3,"dist":"110"},{"number":6,"par":3,"dist":"306"},{"number":7,"par":4,"dist":"228"},{"number":8,"par":5,"dist":"107"},{"number":9,"par":4,"dist":"400"}]}];
+
+let courses = [];
+let current = { course:null, goals:{}, scores:{}, clubs:{}, notes:{}, actualClubs:{}, postNotes:{} };
+let editingCourseId = null;
+let editMaps = {};
+
+function setStatus(type, text) {
+  const el = document.getElementById('cloudStatus');
+  el.className = 'cloud-status ' + (type==='on'?'cloud-on':type==='off'?'cloud-off':'cloud-sync');
+  el.textContent = text;
+}
+
+async function diagnose() {
+  const box = document.getElementById('diagResult');
+  box.style.display = 'block';
+  box.textContent = '🔍 진단 중...\n';
+  // 1. 라이브러리 확인
+  if (typeof supabase === 'undefined' || !supabase.createClient) {
+    box.textContent += '❌ Supabase 라이브러리가 로드되지 않았습니다.\n인터넷 연결을 확인하거나 새로고침 해보세요.';
+    return;
+  }
+  box.textContent += '✅ 라이브러리 로드됨\n';
+  // 2. 클라이언트 확인
+  if (!sb) { sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY); }
+  box.textContent += '✅ 클라이언트 생성됨\n';
+  // 3. 실제 연결 테스트
+  try {
+    const { data, error } = await sb.from('courses').select('*');
+    if (error) {
+      box.textContent += '❌ 데이터베이스 응답 오류:\n' + JSON.stringify(error, null, 2);
+      return;
+    }
+    box.textContent += '✅ 클라우드 연결 성공!\n현재 코스 ' + (data?data.length:0) + '개\n\n잠시 후 자동으로 코스가 표시됩니다.';
+    courses = (data||[]).map(d => ({ id:String(d.id), name:d.name, holes:d.holes }));
+    if (courses.length === 0) {
+      box.textContent += '\n☁️ 기본 코스 8개를 심는 중...';
+      for (const c of SEED) { await sb.from('courses').upsert({ id:c.id, name:c.name, holes:c.holes }); }
+      courses = SEED.slice();
+    }
+    setStatus('on','☁️ 클라우드 연결됨');
+    renderDashboard();
+    box.textContent += '\n✅ 완료! 코스 목록을 확인하세요.';
+  } catch(e) {
+    box.textContent += '❌ 연결 실패:\n' + (e.message || String(e));
+  }
+}
+
+// ===== 클라우드에서 코스 불러오기 =====
+async function loadCourses() {
+  try {
+    setStatus('sync','☁️ 불러오는 중...');
+    const { data, error } = await sb.from('courses').select('*').order('id');
+    if (error) throw error;
+    if (!data || data.length === 0) {
+      // 처음이면 기본 8개 코스를 클라우드에 심기
+      for (const c of SEED) {
+        await sb.from('courses').upsert({ id:c.id, name:c.name, holes:c.holes });
+      }
+      courses = SEED.slice();
+    } else {
+      courses = data.map(d => ({ id:String(d.id), name:d.name, holes:d.holes }));
+    }
+    setStatus('on','☁️ 클라우드 연결됨');
+    show('dashboardView');
+    renderDashboard();
+  } catch(e) {
+    setStatus('off','⚠️ 연결 실패 (새로고침 해보세요)');
+    show('dashboardView');
+    renderDashboard();
+  }
+}
+
+async function saveCourseToCloud(c) {
+  setStatus('sync','☁️ 저장 중...');
+  const { error } = await sb.from('courses').upsert({ id:c.id, name:c.name, holes:c.holes });
+  if (error) { setStatus('off','⚠️ 저장 실패'); return false; }
+  setStatus('on','☁️ 저장됨'); return true;
+}
+async function deleteCourseFromCloud(id) {
+  await sb.from('courses').delete().eq('id', id);
+}
+
+function renderDashboard() {
+  const list = document.getElementById('courseList');
+  if (courses.length === 0) { list.innerHTML = '<p style="color:#999;">코스가 없습니다.</p>'; return; }
+  list.innerHTML = courses.map(c => `
+    <div class="course-card">
+      <h3>${c.name}</h3>
+      <p>${c.holes.length}홀 · Par ${c.holes.reduce((s,h)=>s+Number(h.par||0),0)}</p>
+      <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-secondary" style="padding:6px 12px; font-size:0.85em;" onclick="editCourse('${c.id}')">✏️ 수정</button>
+        <button class="btn btn-danger" style="padding:6px 12px; font-size:0.85em;" onclick="deleteCourse('${c.id}')">🗑️ 삭제</button>
+        <button class="btn btn-primary" style="padding:6px 12px; font-size:0.85em;" onclick="startRound('${c.id}')">▶️ 라운드</button>
+      </div>
+    </div>`).join('');
+}
+
+function openAddCourse() {
+  editingCourseId = null;
+  document.getElementById('courseEditTitle').textContent = '새 코스 추가';
+  document.getElementById('newCourseName').value = '';
+  document.getElementById('newCourseHoleCount').value = '18';
+  renderHoleEditor();
+  show('courseEditView');
+}
+function editCourse(id) {
+  const c = courses.find(x=>x.id===id); if(!c) return;
+  editingCourseId = id;
+  document.getElementById('courseEditTitle').textContent = '코스 수정';
+  document.getElementById('newCourseName').value = c.name;
+  document.getElementById('newCourseHoleCount').value = String(c.holes.length);
+  renderHoleEditor(c.holes);
+  show('courseEditView');
+}
+async function deleteCourse(id) {
+  if(!confirm('이 코스를 삭제할까요?')) return;
+  await deleteCourseFromCloud(id);
+  courses = courses.filter(c=>c.id!==id);
+  renderDashboard();
+}
+function renderHoleEditor(existing) {
+  const count = parseInt(document.getElementById('newCourseHoleCount').value);
+  const defaults18 = [4,4,3,5,4,3,4,5,4,4,4,3,5,4,3,4,5,4];
+  const defaults9 = [4,4,3,5,4,3,4,5,4];
+  const defaults = count===9?defaults9:defaults18;
+  editMaps = {};
+  if(existing) existing.forEach((h,i)=>{ if(h.map) editMaps[i]=h.map; });
+  let html='';
+  for(let i=0;i<count;i++){
+    const h = existing?existing[i]:null;
+    const par = h?h.par:defaults[i];
+    const dist = h?(h.dist||''):'';
+    html += `<div class="hole-edit-row">
+      <span>${i+1}홀</span>
+      <select id="edit_par_${i}">${[3,4,5].map(p=>`<option value="${p}" ${p==par?'selected':''}>Par ${p}</option>`).join('')}</select>
+      <input type="text" id="edit_dist_${i}" value="${dist}" placeholder="거리(m)">
+      <div class="map-upload-cell">
+        <label class="upbtn">📷 홀맵 올리기<input type="file" accept="image/*" style="display:none;" onchange="uploadMap(${i},this)"></label>
+        <span id="map_preview_${i}">${editMaps[i]?`<img src="${editMaps[i]}"><span class="clearmap" onclick="clearMap(${i})">✕ 삭제</span>`:''}</span>
+      </div>
+    </div>`;
+  }
+  document.getElementById('holeEditor').innerHTML = html;
+}
+function uploadMap(i,input){
+  const file=input.files[0]; if(!file)return;
+  const reader=new FileReader();
+  reader.onload=function(e){
+    const img=new Image();
+    img.onload=function(){
+      const maxW=600; const scale=Math.min(1,maxW/img.width);
+      const canvas=document.createElement('canvas');
+      canvas.width=img.width*scale; canvas.height=img.height*scale;
+      canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+      const c=canvas.toDataURL('image/jpeg',0.7);
+      editMaps[i]=c;
+      document.getElementById('map_preview_'+i).innerHTML=`<img src="${c}"><span class="clearmap" onclick="clearMap(${i})">✕ 삭제</span>`;
+    };
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+function clearMap(i){ delete editMaps[i]; document.getElementById('map_preview_'+i).innerHTML=''; }
+
+async function saveCourse() {
+  const name=document.getElementById('newCourseName').value.trim();
+  if(!name){ alert('코스명을 입력하세요'); return; }
+  const count=parseInt(document.getElementById('newCourseHoleCount').value);
+  const holes=[];
+  for(let i=0;i<count;i++){
+    holes.push({number:i+1, par:parseInt(document.getElementById('edit_par_'+i).value), dist:document.getElementById('edit_dist_'+i).value.trim(), map:editMaps[i]||''});
+  }
+  let c;
+  if(editingCourseId){ c=courses.find(x=>x.id===editingCourseId); c.name=name; c.holes=holes; }
+  else { c={id:'c'+Date.now(), name, holes}; courses.push(c); }
+  const ok = await saveCourseToCloud(c);
+  if(ok){ renderDashboard(); show('dashboardView'); }
+}
+
+function startRound(id){
+  const c=courses.find(x=>x.id===id); if(!c)return;
+  current={course:c, goals:{}, scores:{}, clubs:{}, notes:{}, actualClubs:{}, postNotes:{}};
+  document.getElementById('r_courseName').value=c.name;
+  document.getElementById('r_date').valueAsDate=new Date();
+  document.getElementById('r_front9').value=''; document.getElementById('r_back9').value=''; document.getElementById('r_greenspeed').value='';
+  renderPrep(); show('prepView');
+}
+function renderPrep(){
+  document.getElementById('prepGrid').innerHTML=current.course.holes.map(h=>`
+    <div class="hole-card">
+      <div class="hole-number">홀 ${h.number} (Par ${h.par}${h.dist?', '+h.dist+'m':''})</div>
+      ${h.map?`<img src="${h.map}" style="width:100%;border-radius:6px;margin-bottom:8px;">`:''}
+      <div class="hole-input"><label>📝 목표</label><textarea onchange="current.goals[${h.number}]=this.value" style="min-height:55px;">${current.goals[h.number]||''}</textarea></div>
+    </div>`).join('');
+}
+function goInput(){ current.front9=document.getElementById('r_front9').value; current.back9=document.getElementById('r_back9').value; renderInput(); show('inputView'); }
+function holeInputCard(h){
+  return `<div class="hole-card">
+    <div class="hole-number">홀 ${h.number} (Par ${h.par})</div>
+    ${h.map?`<img src="${h.map}" style="width:100%;border-radius:6px;margin-bottom:8px;">`:''}
+    <div class="hole-input"><label>스코어</label><input type="number" min="1" max="15" class="score-input" value="${current.scores[h.number]||''}" onchange="current.scores[${h.number}]=this.value; updateLive();"></div>
+    <div class="hole-input"><label>클럽</label><select onchange="current.clubs[${h.number}]=this.value"><option value="">선택</option>${CLUBS.map(c=>`<option value="${c}" ${current.clubs[h.number]===c?'selected':''}>${c}</option>`).join('')}</select></div>
+    <div class="hole-input"><label>전략·메모</label><input type="text" value="${current.notes[h.number]||''}" onchange="current.notes[${h.number}]=this.value" placeholder="샷·전략 코멘트"></div>
+  </div>`;
+}
+function renderInput(){
+  const hs=current.course.holes; const half=Math.ceil(hs.length/2);
+  const f=current.front9||'Front 9'; const b=current.back9||'Back 9';
+  let html=`<div class="nine-title">🏌️ Front 9: ${f}</div><div class="hole-grid">`+hs.slice(0,half).map(holeInputCard).join('')+'</div>';
+  if(hs.length>half){ html+=`<div class="nine-title">🏌️ Back 9: ${b}</div><div class="hole-grid">`+hs.slice(half).map(holeInputCard).join('')+'</div>'; }
+  document.getElementById('inputGrid').innerHTML=html; updateLive();
+}
+function updateLive(){
+  const total=Object.values(current.scores).reduce((s,v)=>s+(parseInt(v)||0),0);
+  const par=current.course.holes.reduce((s,h)=>s+Number(h.par),0);
+  document.getElementById('liveTotal').textContent=total||'-';
+  document.getElementById('liveVsPar').textContent=total?(total-par>0?'+':'')+(total-par):'-';
+}
+function goPost(){ renderPost(); show('postView'); }
+function holePostCard(h){
+  return `<div class="hole-card">
+    <div class="hole-number">홀 ${h.number} · 스코어 ${current.scores[h.number]||'-'}</div>
+    ${h.map?`<img src="${h.map}" style="width:100%;border-radius:6px;margin-bottom:8px;">`:''}
+    <div style="background:#fff9e6;padding:8px;border-radius:4px;margin-bottom:8px;font-size:0.82em;">📝 목표: ${current.goals[h.number]||'-'}</div>
+    <div class="hole-input"><label>🎯 실제 사용 클럽</label><input type="text" value="${current.actualClubs[h.number]||''}" onchange="current.actualClubs[${h.number}]=this.value" placeholder="예: DR 160m → 5i"></div>
+    <div class="hole-input"><label>상황 기록</label><textarea onchange="current.postNotes[${h.number}]=this.value" style="min-height:55px;">${current.postNotes[h.number]||''}</textarea></div>
+  </div>`;
+}
+function renderPost(){
+  const hs=current.course.holes; const half=Math.ceil(hs.length/2);
+  const f=current.front9||'Front 9'; const b=current.back9||'Back 9';
+  let html=`<div class="nine-title">🏌️ Front 9: ${f}</div><div class="hole-grid">`+hs.slice(0,half).map(holePostCard).join('')+'</div>';
+  if(hs.length>half){ html+=`<div class="nine-title">🏌️ Back 9: ${b}</div><div class="hole-grid">`+hs.slice(half).map(holePostCard).join('')+'</div>'; }
+  document.getElementById('postGrid').innerHTML=html;
+}
+function goExport(){ document.getElementById('codeOut').textContent=buildBlogHTML(); show('exportView'); }
+function buildBlogHTML(){
+  const name=document.getElementById('r_courseName').value;
+  const date=document.getElementById('r_date').value;
+  const weather=document.getElementById('r_weather').value;
+  const temp=document.getElementById('r_temp').value;
+  const front9=current.front9||''; const back9=current.back9||'';
+  const gs=document.getElementById('r_greenspeed').value;
+  const notes=document.getElementById('m_notes').value;
+  const video=document.getElementById('m_video').value;
+  const photos=document.getElementById('m_photos').value.split('\n').filter(u=>u.trim());
+  let vid='';
+  if(video){ let id=video.includes('watch?v=')?video.split('watch?v=')[1].split('&')[0]:(video.includes('youtu.be/')?video.split('youtu.be/')[1].split('?')[0]:video); vid=`<div style="position:relative;width:100%;padding-bottom:56.25%;margin-bottom:24px;background:#000;border-radius:8px;overflow:hidden;"><iframe src="https://www.youtube.com/embed/${id}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;" allowfullscreen></iframe></div>`; }
+  let gal=''; if(photos.length){ gal=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:24px;">${photos.map(u=>`<img src="${u.trim()}" style="width:100%;border-radius:8px;">`).join('')}</div>`; }
+  const total=Object.values(current.scores).reduce((s,v)=>s+(parseInt(v)||0),0);
+  const par=current.course.holes.reduce((s,h)=>s+Number(h.par),0);
+  const rows=current.course.holes.map(h=>{
+    const sc=current.scores[h.number]||'-'; const vp=sc!=='-'?parseInt(sc)-h.par:null;
+    const vpt=vp===null?'-':(vp===0?'E':(vp>0?'+'+vp:vp)); const type=vp===null?'-':(vp===0?'파':(vp>0?'오버':'언더'));
+    return `<tr><td>${h.number}</td><td>${h.par}</td><td><b>${sc}</b></td><td>${vpt}</td><td>${type}</td><td style="font-size:0.85em;">${current.goals[h.number]||'-'}</td><td style="font-size:0.85em;">${current.actualClubs[h.number]||'-'}</td><td style="font-size:0.85em;">${current.postNotes[h.number]||'-'}</td></tr>`;
+  }).join('');
+  return `<div style="max-width:900px;margin:0 auto;font-family:'Noto Sans KR',sans-serif;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
+<div style="background:linear-gradient(135deg,#2c5aa0,#1e3a5f);color:#fff;padding:36px 28px;text-align:center;">
+<h1 style="font-size:2.2em;margin-bottom:12px;">⛳ ${name}</h1>
+<div style="display:flex;justify-content:center;gap:18px;flex-wrap:wrap;margin-bottom:10px;"><span>📅 ${date}</span><span>☀️ ${weather}, ${temp}</span></div>
+<div style="background:rgba(255,255,255,0.12);padding:12px;border-radius:8px;font-size:0.92em;">${front9?`<p>🏌️ Front 9: ${front9}</p>`:''}${back9?`<p>🏌️ Back 9: ${back9}</p>`:''}${gs?`<p>💚 그린스피드: ${gs}</p>`:''}</div></div>
+<div style="padding:36px 28px;">${vid}${gal}
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:28px;">
+<div style="background:#f0f4ff;padding:18px;border-radius:8px;text-align:center;"><div style="font-size:2em;font-weight:bold;color:#2c5aa0;">${total||'-'}</div><div style="color:#666;font-size:0.88em;">합계 (Par ${par})</div></div>
+<div style="background:#f0f4ff;padding:18px;border-radius:8px;text-align:center;"><div style="font-size:2em;font-weight:bold;color:#2c5aa0;">${total?(total-par>0?'+':'')+(total-par):'-'}</div><div style="color:#666;font-size:0.88em;">vs Par</div></div></div>
+<h2 style="font-size:1.4em;color:#1e3a5f;margin-bottom:16px;padding-bottom:8px;border-bottom:3px solid #2c5aa0;">📊 상세 라운드 기록</h2>
+<table style="width:100%;border-collapse:collapse;font-size:0.85em;margin-bottom:28px;"><tr style="background:#2c5aa0;color:#fff;"><th style="padding:10px;">홀</th><th>Par</th><th>스코어</th><th>vs Par</th><th>구분</th><th>목표</th><th>실제클럽</th><th>상황</th></tr>${rows}</table>
+${notes?`<h2 style="font-size:1.4em;color:#1e3a5f;margin-bottom:16px;padding-bottom:8px;border-bottom:3px solid #2c5aa0;">💭 라운드 회고</h2><div style="background:#f0f4ff;padding:22px;border-radius:8px;border-left:5px solid #2c5aa0;white-space:pre-wrap;">${notes}</div>`:''}</div>
+<div style="background:#f8f9fa;padding:18px;text-align:center;color:#999;font-size:0.85em;">⛳ 골프 라운드 기록 | ${date}</div></div>`;
+}
+function copyCode(){ navigator.clipboard.writeText(document.getElementById('codeOut').textContent).then(()=>{const m=document.getElementById('copyMsg');m.style.display='block';setTimeout(()=>m.style.display='none',3000);}); }
+function show(id){ document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); document.getElementById(id).classList.add('active'); window.scrollTo(0,0); }
+
+loadCourses();
+</script>
+</body>
+</html>
