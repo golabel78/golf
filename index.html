@@ -384,13 +384,62 @@ function startRound(id){
   document.getElementById('r_front9').value=''; document.getElementById('r_back9').value=''; document.getElementById('r_greenspeed').value='';
   renderPrep(); show('prepView');
 }
+// 내 클럽 거리 (RED 티 기준, total 거리 m)
+const MY_CLUBS = [
+  {name:'DR', dist:160},
+  {name:'3W', dist:145},
+  {name:'HY', dist:135},
+  {name:'5i', dist:125},
+  {name:'6i', dist:115},
+  {name:'7i', dist:105},
+  {name:'8i', dist:95},
+  {name:'9i', dist:85},
+  {name:'PW', dist:80},
+  {name:'48°', dist:70},
+  {name:'56°', dist:50}
+];
+
+// 홀 거리에 맞춰 공략 추천 (그린까지 남은 거리를 줄여나감)
+function suggestStrategy(holeDist, par){
+  let remain = parseInt(holeDist);
+  if (!remain || remain<=0) return '';
+  const plan = [];
+  let guard = 0;
+  while (remain > 0 && guard < 8) {
+    guard++;
+    if (remain <= 60) {
+      // 그린 근처: 가장 가까운 웨지/퍼터
+      if (remain <= 10) { plan.push('PT(퍼팅)'); break; }
+      // 56도(40~60), 48도(70) 중 적당한 것
+      let wedge = MY_CLUBS.find(c=>c.dist>=remain) || MY_CLUBS[MY_CLUBS.length-1];
+      plan.push(`${wedge.name}(${remain}m)`);
+      plan.push('PT(퍼팅)');
+      break;
+    }
+    // 남은 거리에 가장 가까운(넘지 않는 쪽 우선) 클럽
+    let club = null;
+    for (let i=0;i<MY_CLUBS.length;i++){
+      if (MY_CLUBS[i].dist <= remain) { club = MY_CLUBS[i]; break; }
+    }
+    if (!club) club = MY_CLUBS[MY_CLUBS.length-1];
+    plan.push(`${club.name}(${club.dist}m)`);
+    remain -= club.dist;
+    if (remain < 0) remain = 0;
+  }
+  return plan.join(' → ');
+}
+
 function renderPrep(){
-  document.getElementById('prepGrid').innerHTML=current.course.holes.map(h=>`
+  document.getElementById('prepGrid').innerHTML=current.course.holes.map(h=>{
+    const strategy = suggestStrategy(h.dist, h.par);
+    return `
     <div class="hole-card">
       <div class="hole-number">홀 ${h.number} (Par ${h.par}${h.dist?', '+h.dist+'m':''})</div>
-      ${h.map?`<img src="${h.map}" style="width:100%;border-radius:6px;margin-bottom:8px;">`:''}
-      <div class="hole-input"><label>📝 목표</label><textarea onchange="current.goals[${h.number}]=this.value" style="min-height:55px;">${current.goals[h.number]||''}</textarea></div>
-    </div>`).join('');
+      ${h.map?`<img src="${h.map}" style="width:100%;border-radius:6px;margin-bottom:8px;">`:'<div style="background:#f0f0f0;color:#999;padding:20px;text-align:center;border-radius:6px;margin-bottom:8px;font-size:0.82em;">홀맵 없음 (코스 수정에서 등록)</div>'}
+      ${strategy?`<div style="background:#e8f0ff;color:#1e3c72;padding:8px 10px;border-radius:6px;font-size:0.82em;margin-bottom:8px;"><b>🎯 추천 공략:</b><br>${strategy}</div>`:''}
+      <div class="hole-input"><label>📝 나의 목표 (시뮬레이션 후)</label><textarea onchange="current.goals[${h.number}]=this.value" style="min-height:55px;" placeholder="추천을 참고해 나만의 목표·전략 작성">${current.goals[h.number]||''}</textarea></div>
+    </div>`;
+  }).join('');
 }
 function goInput(){ current.front9=document.getElementById('r_front9').value; current.back9=document.getElementById('r_back9').value; renderInput(); show('inputView'); }
 function holeInputCard(h){
