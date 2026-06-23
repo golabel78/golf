@@ -394,13 +394,35 @@ function renderPrep(){
 }
 function goInput(){ current.front9=document.getElementById('r_front9').value; current.back9=document.getElementById('r_back9').value; renderInput(); show('inputView'); }
 function holeInputCard(h){
+  const shots = current.clubs[h.number] || ['','','','',''];
+  // 온/퍼트 자동 계산
+  let putts = shots.filter(s=>s==='PT').length;
+  let firstPutt = shots.findIndex(s=>s==='PT');
+  let onShots = firstPutt === -1 ? shots.filter(s=>s).length : firstPutt;
+  let resultText = '';
+  if (shots.filter(s=>s).length > 0) {
+    if (putts > 0 && onShots > 0) resultText = `${onShots}온 ${putts}퍼트`;
+    else if (onShots > 0) resultText = `${onShots}샷`;
+    else if (putts > 0) resultText = `${putts}퍼트`;
+  }
+  const clubSelects = [0,1,2,3,4].map(idx=>`
+    <select onchange="setClub(${h.number},${idx},this.value)" style="margin-bottom:4px;">
+      <option value="">${idx+1}번째 클럽</option>
+      ${CLUBS.map(c=>`<option value="${c}" ${shots[idx]===c?'selected':''}>${c}</option>`).join('')}
+    </select>`).join('');
   return `<div class="hole-card">
     <div class="hole-number">홀 ${h.number} (Par ${h.par})</div>
     ${h.map?`<img src="${h.map}" style="width:100%;border-radius:6px;margin-bottom:8px;">`:''}
     <div class="hole-input"><label>스코어</label><input type="number" min="1" max="15" class="score-input" value="${current.scores[h.number]||''}" onchange="current.scores[${h.number}]=this.value; updateLive();"></div>
-    <div class="hole-input"><label>클럽</label><select onchange="current.clubs[${h.number}]=this.value"><option value="">선택</option>${CLUBS.map(c=>`<option value="${c}" ${current.clubs[h.number]===c?'selected':''}>${c}</option>`).join('')}</select></div>
+    <div class="hole-input"><label>샷 순서대로 클럽 선택</label>${clubSelects}</div>
+    ${resultText?`<div style="background:#e8f5e9;color:#2e7d32;padding:6px 10px;border-radius:6px;font-weight:600;font-size:0.9em;text-align:center;margin-bottom:8px;">⛳ ${resultText}</div>`:''}
     <div class="hole-input"><label>전략·메모</label><input type="text" value="${current.notes[h.number]||''}" onchange="current.notes[${h.number}]=this.value" placeholder="샷·전략 코멘트"></div>
   </div>`;
+}
+function setClub(holeNum, idx, val){
+  if (!Array.isArray(current.clubs[holeNum])) current.clubs[holeNum] = ['','','','',''];
+  current.clubs[holeNum][idx] = val;
+  renderInput();
 }
 function renderInput(){
   const hs=current.course.holes; const half=Math.ceil(hs.length/2);
@@ -417,11 +439,18 @@ function updateLive(){
 }
 function goPost(){ renderPost(); show('postView'); }
 function holePostCard(h){
+  const shots = Array.isArray(current.clubs[h.number]) ? current.clubs[h.number].filter(s=>s) : [];
+  const usedClubs = shots.length ? shots.join(' → ') : '';
+  let putts = shots.filter(s=>s==='PT').length;
+  let firstPutt = shots.findIndex(s=>s==='PT');
+  let onShots = firstPutt === -1 ? shots.length : firstPutt;
+  let resultText = (putts>0&&onShots>0)?`${onShots}온 ${putts}퍼트`:(onShots>0?`${onShots}샷`:(putts>0?`${putts}퍼트`:''));
   return `<div class="hole-card">
-    <div class="hole-number">홀 ${h.number} · 스코어 ${current.scores[h.number]||'-'}</div>
+    <div class="hole-number">홀 ${h.number} · 스코어 ${current.scores[h.number]||'-'}${resultText?' · '+resultText:''}</div>
     ${h.map?`<img src="${h.map}" style="width:100%;border-radius:6px;margin-bottom:8px;">`:''}
     <div style="background:#fff9e6;padding:8px;border-radius:4px;margin-bottom:8px;font-size:0.82em;">📝 목표: ${current.goals[h.number]||'-'}</div>
-    <div class="hole-input"><label>🎯 실제 사용 클럽</label><input type="text" value="${current.actualClubs[h.number]||''}" onchange="current.actualClubs[${h.number}]=this.value" placeholder="예: DR 160m → 5i"></div>
+    ${usedClubs?`<div style="background:#eef3ff;padding:8px;border-radius:4px;margin-bottom:8px;font-size:0.82em;">🏌️ 사용 클럽: ${usedClubs}</div>`:''}
+    <div class="hole-input"><label>🎯 실제 사용 클럽 (추가 메모)</label><input type="text" value="${current.actualClubs[h.number]||''}" onchange="current.actualClubs[${h.number}]=this.value" placeholder="예: DR 160m → 5i"></div>
     <div class="hole-input"><label>상황 기록</label><textarea onchange="current.postNotes[${h.number}]=this.value" style="min-height:55px;">${current.postNotes[h.number]||''}</textarea></div>
   </div>`;
 }
@@ -451,7 +480,11 @@ function buildBlogHTML(){
   const rows=current.course.holes.map(h=>{
     const sc=current.scores[h.number]||'-'; const vp=sc!=='-'?parseInt(sc)-h.par:null;
     const vpt=vp===null?'-':(vp===0?'E':(vp>0?'+'+vp:vp)); const type=vp===null?'-':(vp===0?'파':(vp>0?'오버':'언더'));
-    return `<tr><td>${h.number}</td><td>${h.par}</td><td><b>${sc}</b></td><td>${vpt}</td><td>${type}</td><td style="font-size:0.85em;">${current.goals[h.number]||'-'}</td><td style="font-size:0.85em;">${current.actualClubs[h.number]||'-'}</td><td style="font-size:0.85em;">${current.postNotes[h.number]||'-'}</td></tr>`;
+    const shots = Array.isArray(current.clubs[h.number]) ? current.clubs[h.number].filter(s=>s) : [];
+    const usedClubs = shots.length ? shots.join(' → ') : (current.actualClubs[h.number]||'-');
+    let putts=shots.filter(s=>s==='PT').length, fp=shots.findIndex(s=>s==='PT'), onS=fp===-1?shots.length:fp;
+    const result=(putts>0&&onS>0)?`${onS}온 ${putts}퍼트`:'';
+    return `<tr><td>${h.number}</td><td>${h.par}</td><td><b>${sc}</b></td><td>${vpt}</td><td>${result||type}</td><td style="font-size:0.85em;">${current.goals[h.number]||'-'}</td><td style="font-size:0.85em;">${usedClubs}</td><td style="font-size:0.85em;">${current.postNotes[h.number]||'-'}</td></tr>`;
   }).join('');
   return `<div style="max-width:900px;margin:0 auto;font-family:'Noto Sans KR',sans-serif;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
 <div style="background:linear-gradient(135deg,#2c5aa0,#1e3a5f);color:#fff;padding:36px 28px;text-align:center;">
