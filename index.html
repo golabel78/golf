@@ -138,8 +138,8 @@ body { font-family:'Noto Sans KR',-apple-system,sans-serif; background:linear-gr
   <div class="card">
     <h2 class="section-title">📊 라운드 중: 스코어</h2>
     <div class="score-summary">
-      <div class="score-box"><div class="score-number" id="liveTotal">-</div><div class="score-label">총 타수</div></div>
-      <div class="score-box"><div class="score-number" id="liveVsPar">-</div><div class="score-label">vs Par</div></div>
+      <div class="score-box"><div class="score-number" id="liveTotal">-</div><div class="score-label">합계 (par 대비)</div></div>
+      <div class="score-box"><div class="score-number" id="liveVsPar">-</div><div class="score-label">총 스코어</div></div>
     </div>
     <div id="inputGrid"></div>
     <div class="button-group"><button class="btn btn-success" onclick="goPost()">✓ 라운드 완료</button></div>
@@ -400,18 +400,19 @@ function holeInputCard(h){
   let firstPutt = used.findIndex(s=>s==='PT');
   let onShots = firstPutt === -1 ? used.length : firstPutt;
   let resultText = '';
+  let strokes = used.length; // 총 타수 = 친 클럽 수
   if (used.length > 0) {
     if (putts > 0 && onShots > 0) resultText = `${onShots}온 ${putts}퍼트`;
     else if (onShots > 0) resultText = `${onShots}샷`;
     else if (putts > 0) resultText = `${putts}퍼트`;
   }
-  // 스코어 대비 par 표시
-  const sc = current.scores[h.number];
+  // par 대비 스코어
   let scoreLabel = '';
-  if (sc) {
-    const diff = parseInt(sc) - h.par;
+  if (strokes > 0) {
+    const diff = strokes - h.par;
     const names = {'-4':'콘도르','-3':'알바트로스','-2':'이글','-1':'버디','0':'파','1':'보기','2':'더블보기','3':'트리플'};
-    scoreLabel = names[String(diff)] || (diff>0?`+${diff}`:`${diff}`);
+    const diffText = diff>0?`+${diff}`:(diff===0?'E':`${diff}`);
+    scoreLabel = `${strokes}타 (${diffText}, ${names[String(diff)]||diffText})`;
   }
   const clubSelects = [0,1,2,3,4].map(idx=>`
     <select onchange="setClub(${h.number},${idx},this.value)" style="margin-bottom:4px;">
@@ -421,17 +422,36 @@ function holeInputCard(h){
   return `<div class="hole-card">
     <div class="hole-number">홀 ${h.number} (Par ${h.par})</div>
     ${h.map?`<img src="${h.map}" style="width:100%;border-radius:6px;margin-bottom:8px;">`:''}
-    <div class="hole-input"><label>스코어 (실제 친 타수)</label><input type="number" min="1" max="15" class="score-input" value="${current.scores[h.number]||''}" onchange="current.scores[${h.number}]=this.value; renderInput();"></div>
-    ${scoreLabel?`<div style="background:#fff3cd;color:#856404;padding:5px 10px;border-radius:6px;font-weight:600;font-size:0.88em;text-align:center;margin-bottom:8px;">${scoreLabel}</div>`:''}
-    <div class="hole-input"><label>샷 순서대로 클럽 선택</label>${clubSelects}</div>
-    ${resultText?`<div style="background:#e8f5e9;color:#2e7d32;padding:6px 10px;border-radius:6px;font-weight:600;font-size:0.9em;text-align:center;margin-bottom:8px;">⛳ ${resultText}</div>`:''}
+    <div class="hole-input"><label>샷 순서대로 클럽 선택 (타수 자동 계산)</label>${clubSelects}</div>
+    ${resultText?`<div style="background:#e8f5e9;color:#2e7d32;padding:6px 10px;border-radius:6px;font-weight:600;font-size:0.9em;text-align:center;margin-bottom:6px;">⛳ ${resultText}</div>`:''}
+    ${scoreLabel?`<div style="background:#2a5298;color:#fff;padding:8px 10px;border-radius:6px;font-weight:700;font-size:1em;text-align:center;margin-bottom:8px;">${scoreLabel}</div>`:''}
     <div class="hole-input"><label>전략·메모</label><input type="text" value="${current.notes[h.number]||''}" onchange="current.notes[${h.number}]=this.value" placeholder="샷·전략 코멘트"></div>
   </div>`;
 }
 function setClub(holeNum, idx, val){
   if (!Array.isArray(current.clubs[holeNum])) current.clubs[holeNum] = ['','','','',''];
   current.clubs[holeNum][idx] = val;
+  // 타수 = 친 클럽 수, 스코어 자동 저장
+  const strokes = current.clubs[holeNum].filter(s=>s).length;
+  current.scores[holeNum] = strokes>0 ? strokes : '';
   renderInput();
+}
+function updateLive(){
+  // 각 홀: 타수 = 친 클럽 수, 합계 = par 대비 차이의 누적
+  let diffSum = 0;       // par 대비 누적 (예: -1)
+  let totalStrokes = 0;  // 총 친 타수
+  let played = false;
+  current.course.holes.forEach(h=>{
+    const shots = Array.isArray(current.clubs[h.number]) ? current.clubs[h.number].filter(s=>s) : [];
+    if (shots.length > 0) {
+      played = true;
+      totalStrokes += shots.length;
+      diffSum += (shots.length - h.par);
+    }
+  });
+  const basePar = current.course.holes.reduce((s,h)=>s+Number(h.par),0); // 코스 전체 par (9홀이면 ~36)
+  document.getElementById('liveTotal').textContent = played ? (diffSum>0?'+':'')+diffSum : '-';
+  document.getElementById('liveVsPar').textContent = played ? (basePar + diffSum) : '-';
 }
 function renderInput(){
   const hs=current.course.holes; const half=Math.ceil(hs.length/2);
@@ -439,14 +459,6 @@ function renderInput(){
   let html=`<div class="nine-title">🏌️ Front 9: ${f}</div><div class="hole-grid">`+hs.slice(0,half).map(holeInputCard).join('')+'</div>';
   if(hs.length>half){ html+=`<div class="nine-title">🏌️ Back 9: ${b}</div><div class="hole-grid">`+hs.slice(half).map(holeInputCard).join('')+'</div>'; }
   document.getElementById('inputGrid').innerHTML=html; updateLive();
-}
-function updateLive(){
-  const total=Object.values(current.scores).reduce((s,v)=>s+(parseInt(v)||0),0);
-  // 스코어를 입력한 홀의 par만 합산 (9홀 코스 -68 버그 방지)
-  let par=0;
-  current.course.holes.forEach(h=>{ if(current.scores[h.number]) par+=Number(h.par); });
-  document.getElementById('liveTotal').textContent=total||'-';
-  document.getElementById('liveVsPar').textContent=total?(total-par>0?'+':'')+(total-par):'-';
 }
 function goPost(){ renderPost(); show('postView'); }
 function holePostCard(h){
