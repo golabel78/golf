@@ -503,10 +503,19 @@ function updateLive(){
   document.getElementById('liveVsPar').textContent = played ? (basePar + diffSum) : '-';
 }
 function renderInput(){
-  const hs=current.course.holes; const half=Math.ceil(hs.length/2);
+  const hs=current.course.holes;
   const f=current.front9||'Front 9'; const b=current.back9||'Back 9';
-  let html=`<div class="nine-title">🏌️ Front 9: ${f}</div><div class="hole-grid">`+hs.slice(0,half).map(holeInputCard).join('')+'</div>';
-  if(hs.length>half){ html+=`<div class="nine-title">🏌️ Back 9: ${b}</div><div class="hole-grid">`+hs.slice(half).map(holeInputCard).join('')+'</div>'; }
+  let html='';
+  if (hs.length <= 9) {
+    // 9홀 이하: 나누지 않고 그대로
+    const label = current.front9 || (hs.length+'홀');
+    html = `<div class="nine-title">🏌️ ${label}</div><div class="hole-grid">`+hs.map(holeInputCard).join('')+'</div>';
+  } else {
+    // 18홀: Front/Back 분리
+    const half=Math.ceil(hs.length/2);
+    html=`<div class="nine-title">🏌️ Front 9: ${f}</div><div class="hole-grid">`+hs.slice(0,half).map(holeInputCard).join('')+'</div>';
+    html+=`<div class="nine-title">🏌️ Back 9: ${b}</div><div class="hole-grid">`+hs.slice(half).map(holeInputCard).join('')+'</div>';
+  }
   document.getElementById('inputGrid').innerHTML=html; updateLive();
 }
 function goPost(){ renderPost(); show('postView'); }
@@ -527,10 +536,17 @@ function holePostCard(h){
   </div>`;
 }
 function renderPost(){
-  const hs=current.course.holes; const half=Math.ceil(hs.length/2);
+  const hs=current.course.holes;
   const f=current.front9||'Front 9'; const b=current.back9||'Back 9';
-  let html=`<div class="nine-title">🏌️ Front 9: ${f}</div><div class="hole-grid">`+hs.slice(0,half).map(holePostCard).join('')+'</div>';
-  if(hs.length>half){ html+=`<div class="nine-title">🏌️ Back 9: ${b}</div><div class="hole-grid">`+hs.slice(half).map(holePostCard).join('')+'</div>'; }
+  let html='';
+  if (hs.length <= 9) {
+    const label = current.front9 || (hs.length+'홀');
+    html = `<div class="nine-title">🏌️ ${label}</div><div class="hole-grid">`+hs.map(holePostCard).join('')+'</div>';
+  } else {
+    const half=Math.ceil(hs.length/2);
+    html=`<div class="nine-title">🏌️ Front 9: ${f}</div><div class="hole-grid">`+hs.slice(0,half).map(holePostCard).join('')+'</div>';
+    html+=`<div class="nine-title">🏌️ Back 9: ${b}</div><div class="hole-grid">`+hs.slice(half).map(holePostCard).join('')+'</div>';
+  }
   document.getElementById('postGrid').innerHTML=html;
 }
 function goExport(){ document.getElementById('codeOut').textContent=buildBlogHTML(); show('exportView'); }
