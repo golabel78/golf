@@ -433,7 +433,9 @@ function renderInput(){
 }
 function updateLive(){
   const total=Object.values(current.scores).reduce((s,v)=>s+(parseInt(v)||0),0);
-  const par=current.course.holes.reduce((s,h)=>s+Number(h.par),0);
+  // 스코어를 입력한 홀의 par만 합산 (9홀 코스 -68 버그 방지)
+  let par=0;
+  current.course.holes.forEach(h=>{ if(current.scores[h.number]) par+=Number(h.par); });
   document.getElementById('liveTotal').textContent=total||'-';
   document.getElementById('liveVsPar').textContent=total?(total-par>0?'+':'')+(total-par):'-';
 }
