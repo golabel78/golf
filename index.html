@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>⛳ 골프 라운드 앱</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { 
@@ -15,6 +16,7 @@ body {
 .container { max-width: 1100px; margin: 0 auto; }
 .header { text-align: center; color: white; margin-bottom: 20px; }
 .header h1 { font-size: 2em; margin-bottom: 8px; }
+.header p { opacity: 0.9; }
 .card { 
   background: white; 
   border-radius: 12px; 
@@ -71,8 +73,14 @@ body {
 .back-btn { color: #fff; font-weight: 600; cursor: pointer; margin-bottom: 14px; display: inline-block; background: rgba(255,255,255,0.15); padding: 8px 16px; border-radius: 6px; }
 .input-field { margin-bottom: 14px; }
 .input-field label { font-weight: 600; color: #333; margin-bottom: 6px; display: block; }
-.input-field input, .input-field select { width: 100%; padding: 10px; border: 2px solid #e0e0e0; border-radius: 6px; font-family: inherit; font-size: 1em; }
-.input-field input:focus, .input-field select:focus { outline: none; border-color: #2a5298; }
+.input-field input, .input-field select, .input-field textarea { width: 100%; padding: 10px; border: 2px solid #e0e0e0; border-radius: 6px; font-family: inherit; font-size: 1em; }
+.input-field input:focus, .input-field select:focus, .input-field textarea:focus { outline: none; border-color: #2a5298; }
+.code-display { background: #1e1e1e; color: #0f0; padding: 16px; border-radius: 6px; overflow: auto; max-height: 350px; font-family: monospace; font-size: 0.8em; margin: 16px 0; white-space: pre-wrap; word-break: break-all; }
+.success-msg { background: #e8f5e9; color: #2e7d32; padding: 12px; border-radius: 6px; margin-bottom: 16px; border-left: 5px solid #4caf50; }
+.slope-card { background: #f9f9f9; border: 1px solid #ddd; border-radius: 8px; padding: 14px; margin-bottom: 14px; }
+.slope-card h4 { color: #1e3c72; margin-bottom: 10px; font-size: 0.95em; }
+.slope-body { background: white; padding: 10px; border-radius: 6px; font-size: 0.85em; line-height: 1.6; }
+.nine-title { background: #e8f0ff; padding: 12px; border-left: 5px solid #2a5298; margin: 20px 0 14px; border-radius: 4px; font-weight: 600; color: #1e3c72; }
 @media (max-width: 768px) {
   .header h1 { font-size: 1.5em; }
   .hole-grid { grid-template-columns: 1fr; }
@@ -84,7 +92,7 @@ body {
 <div class="container">
 <div class="header">
   <h1>⛳ 골프 라운드 앱</h1>
-  <p>로컬 테스트 버전</p>
+  <p>PC·폰 어디서나 클라우드 자동 저장</p>
 </div>
 
 <div id="dashboardView" class="view active">
@@ -92,6 +100,10 @@ body {
     <h2 class="section-title">📍 내 코스 목록</h2>
     <div id="courseList"></div>
     <button class="btn btn-primary" onclick="openAddCourse()">+ 새 코스 추가</button>
+  </div>
+  <div class="card">
+    <h2 class="section-title">⛰️ 경사지 공략</h2>
+    <button class="btn btn-secondary" onclick="show('slopeGuideView')">경사지 공략 보기</button>
   </div>
 </div>
 
@@ -125,37 +137,169 @@ body {
       <label>날짜</label>
       <input type="date" id="roundDate">
     </div>
-    <div class="score-box" style="margin-bottom: 20px; grid-template-columns: 1fr 1fr; display: grid; gap: 10px;">
-      <div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px;">
+      <div class="score-box">
         <div class="score-number" id="liveScore">-</div>
         <div style="font-size: 0.85em; opacity: 0.9;">현재 스코어</div>
       </div>
-      <div>
+      <div class="score-box">
         <div class="score-number" id="liveVsPar">-</div>
         <div style="font-size: 0.85em; opacity: 0.9;">vs Par</div>
       </div>
     </div>
     <div class="hole-grid" id="holeInputGrid"></div>
-    <button class="btn btn-success" onclick="show('dashboardView')" style="margin-top: 20px;">완료</button>
+    <button class="btn btn-success" onclick="goPost()" style="margin-top: 20px; width: 100%;">✓ 다음 (상세 기록)</button>
+  </div>
+</div>
+
+<div id="postView" class="view">
+  <span class="back-btn" onclick="show('roundView')">← 라운드 입력</span>
+  <div class="card">
+    <h2 class="section-title">📝 라운드 후: 상세 기록</h2>
+    <div id="postGrid"></div>
+    <h2 class="section-title" style="margin-top: 24px;">📸 미디어</h2>
+    <div class="input-field">
+      <label>🎬 라운드 영상 (유튜브 링크)</label>
+      <input type="text" id="m_video" placeholder="https://youtube.com/watch?v=...">
+    </div>
+    <div class="input-field">
+      <label>📸 사진 URL (한 줄에 하나씩)</label>
+      <textarea id="m_photos" rows="4" placeholder="https://.../photo1.jpg"></textarea>
+    </div>
+    <h2 class="section-title" style="margin-top: 24px;">💭 회고</h2>
+    <div class="input-field">
+      <textarea id="m_notes" rows="5" placeholder="라운드 회고, 느낀 점, 다음 목표..."></textarea>
+    </div>
+    <button class="btn btn-success" onclick="goExport()" style="width: 100%; margin-top: 20px;">✓ 블로그 포스트 생성</button>
+  </div>
+</div>
+
+<div id="exportView" class="view">
+  <span class="back-btn" onclick="show('postView')">← 라운드 후 기록</span>
+  <div class="card">
+    <h2 class="section-title">📱 블로그 포스트 완성</h2>
+    <div class="success-msg">✅ 아래 코드 복사 → 네이버 블로그/티스토리 → 새글 → HTML 편집 → 붙여넣기 → 발행</div>
+    <div class="code-display" id="codeOut"></div>
+    <button class="btn btn-primary" onclick="copyCode()" style="width: 100%;">📋 HTML 코드 복사</button>
+    <button class="btn btn-secondary" onclick="show('dashboardView')" style="width: 100%; margin-top: 10px;">새 라운드</button>
+    <div id="copyMsg" class="success-msg" style="display: none; margin-top: 14px;">✅ 복사되었습니다!</div>
+  </div>
+</div>
+
+<div id="slopeGuideView" class="view">
+  <span class="back-btn" onclick="show('dashboardView')">← 돌아가기</span>
+  <div class="card">
+    <h2 class="section-title">⛰️ 경사지 공략 가이드</h2>
+    
+    <h3 style="color: #1e3c72; margin-bottom: 12px;">📍 페어웨이 경사지</h3>
+    
+    <div class="slope-card">
+      <h4>🔵 왼발 오르막</h4>
+      <div class="slope-body">
+        <b>볼 위치:</b> 평소보다 왼쪽(앞쪽) 1볼<br>
+        <b>에이밍:</b> 훅 발생 → 오른쪽 겨냥<br>
+        <b>클럽:</b> 1~2클럽 길게 (탄도 높아져 거리 줄어듦)<br>
+        <b>체크:</b> 오른쪽 어깨 낮춰 어깨선 경사 평행 / 체중 왼발에 의식 / 백스윙 짧게
+      </div>
+    </div>
+
+    <div class="slope-card">
+      <h4>🔵 왼발 내리막</h4>
+      <div class="slope-body">
+        <b>볼 위치:</b> 평소보다 오른쪽(뒤쪽) 1볼<br>
+        <b>에이밍:</b> 슬라이스 발생 → 왼쪽 겨냥<br>
+        <b>클럽:</b> 1~2클럽 짧게 (탄도 낮고 런 많음)<br>
+        <b>체크:</b> 왼쪽 어깨 낮춰 경사 평행 / 경사 따라 내려치기 / 런 많음 주의
+      </div>
+    </div>
+
+    <div class="slope-card">
+      <h4>🟢 발끝 오르막</h4>
+      <div class="slope-body">
+        <b>볼 위치:</b> 평소와 동일<br>
+        <b>에이밍:</b> 훅 발생 → 오른쪽 겨냥<br>
+        <b>클럽:</b> 동일 (그립 짧게 잡아 길이 보정)<br>
+        <b>체크:</b> 그립 짧게 필수 / 플랫 스윙 → 훅 필연 / 스윙 작고 컨트롤
+      </div>
+    </div>
+
+    <div class="slope-card">
+      <h4>🟠 발끝 내리막</h4>
+      <div class="slope-body">
+        <b>볼 위치:</b> 평소보다 약간 오른쪽<br>
+        <b>에이밍:</b> 슬라이스 발생 → 왼쪽 겨냥<br>
+        <b>클럽:</b> 1클럽 길게 (거리 보정)<br>
+        <b>체크:</b> 클럽 끝까지 길게 / 무릎 충분히 구부려 / 머리 고정
+      </div>
+    </div>
+
+    <h3 style="color: #1e3c72; margin: 24px 0 12px;">⛳ 그린 앞 어프로치</h3>
+    
+    <div class="slope-card">
+      <h4>오르막 어프로치</h4>
+      <div class="slope-body">
+        <b>핵심:</b> 볼이 자연히 뜬다 (띄우려 하지 말 것)<br>
+        <b>클럽:</b> 1클럽 길게 / <b>에이밍:</b> 오른쪽 겨냥
+      </div>
+    </div>
+
+    <div class="slope-card">
+      <h4>내리막 어프로치 (가장 어려움)</h4>
+      <div class="slope-body">
+        <b>핵심:</b> 띄우려 하면 얇게 맞음 → 경사 따라 내려치기<br>
+        <b>클럽:</b> 1클럽 짧게 / <b>에이밍:</b> 왼쪽 겨냥 / 런 많음 주의
+      </div>
+    </div>
   </div>
 </div>
 </div>
 
 <script>
+const SUPABASE_URL = 'https://okscfgttlckufpzfqwcs.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_cgJc4XV1iHQlUvxNR7iysQ_Q-5wSmev';
 const CLUBS = ['DR', '3W', 'HY', '5i', '6i', '7i', '8i', '9i', 'PW', '52', '56'];
 
-let courses = [
-  { id: '1', name: 'Solmoro CC', holes: [4,4,3,5,4,3,4,5,4,4,4,3,5,4,3,4,5,4] },
-  { id: '2', name: '엘리시안 강촌 레이크', holes: [4,5,3,4,4,5,3,5,4] },
-  { id: '3', name: 'H1CC 레이크', holes: [4,5,3,5,4,3,4,5,4] }
-];
+let sb = null;
+let courses = [];
+let currentRound = { courseId: null, date: null, scores: {}, clubs: {}, notes: {} };
+let postData = { video: '', photos: '', notes: '' };
 
-let currentRoundCourseId = null;
+function initSupabase() {
+  if (typeof supabase === 'undefined') {
+    setTimeout(initSupabase, 200);
+    return;
+  }
+  sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  loadCourses();
+}
 
-function show(viewId) {
-  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-  document.getElementById(viewId).classList.add('active');
-  window.scrollTo(0, 0);
+async function loadCourses() {
+  try {
+    const { data, error } = await sb.from('courses').select('*').order('id');
+    if (!error && data && data.length > 0) {
+      courses = data.map(d => ({ 
+        id: d.id, 
+        name: d.name, 
+        holes: typeof d.holes === 'string' ? JSON.parse(d.holes) : d.holes 
+      }));
+    } else {
+      courses = [
+        { id: '1', name: 'Solmoro CC', holes: [4,4,3,5,4,3,4,5,4,4,4,3,5,4,3,4,5,4] },
+        { id: '2', name: '엘리시안 강촌 레이크', holes: [4,5,3,4,4,5,3,5,4] },
+        { id: '3', name: 'H1CC 레이크', holes: [4,5,3,5,4,3,4,5,4] }
+      ];
+      for (const c of courses) {
+        await sb.from('courses').upsert({ id: c.id, name: c.name, holes: JSON.stringify(c.holes) });
+      }
+    }
+  } catch (e) {
+    courses = [
+      { id: '1', name: 'Solmoro CC', holes: [4,4,3,5,4,3,4,5,4,4,4,3,5,4,3,4,5,4] },
+      { id: '2', name: '엘리시안 강촌 레이크', holes: [4,5,3,4,4,5,3,5,4] },
+      { id: '3', name: 'H1CC 레이크', holes: [4,5,3,5,4,3,4,5,4] }
+    ];
+  }
+  renderDashboard();
 }
 
 function renderDashboard() {
@@ -166,13 +310,18 @@ function renderDashboard() {
   }).join('');
 }
 
+function show(viewId) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById(viewId).classList.add('active');
+  window.scrollTo(0, 0);
+}
+
 function openAddCourse() {
   document.getElementById('courseEditTitle').textContent = '새 코스 추가';
   document.getElementById('newCourseName').value = '';
   document.getElementById('newCourseHoleCount').value = '18';
   renderHoleEditor();
   show('courseEditView');
-  currentRoundCourseId = null;
 }
 
 function editCourse(id) {
@@ -181,7 +330,6 @@ function editCourse(id) {
   document.getElementById('courseEditTitle').textContent = '코스 수정';
   document.getElementById('newCourseName').value = c.name;
   document.getElementById('newCourseHoleCount').value = String(c.holes.length);
-  currentRoundCourseId = id;
   renderHoleEditor(c.holes);
   show('courseEditView');
 }
@@ -189,7 +337,6 @@ function editCourse(id) {
 function renderHoleEditor(existing) {
   const count = parseInt(document.getElementById('newCourseHoleCount').value);
   const defaults = count === 9 ? [4,4,3,5,4,3,4,5,4] : [4,4,3,5,4,3,4,5,4,4,4,3,5,4,3,4,5,4];
-  
   let html = '';
   for (let i = 0; i < count; i++) {
     const par = existing ? existing[i] : defaults[i];
@@ -198,25 +345,28 @@ function renderHoleEditor(existing) {
   document.getElementById('holeEditor').innerHTML = html;
 }
 
-function saveCourse() {
+async function saveCourse() {
   const name = document.getElementById('newCourseName').value.trim();
   if (!name) { alert('코스명을 입력하세요'); return; }
-  
   const count = parseInt(document.getElementById('newCourseHoleCount').value);
   const holes = [];
-  
   for (let i = 0; i < count; i++) {
     holes.push(parseInt(document.getElementById('edit_par_' + i).value));
   }
   
-  if (currentRoundCourseId) {
-    const c = courses.find(x => x.id === currentRoundCourseId);
-    c.name = name;
+  let c = courses.find(x => x.name === name);
+  if (c) {
     c.holes = holes;
   } else {
-    courses.push({ id: 'c_' + Date.now(), name: name, holes: holes });
+    c = { id: 'c_' + Date.now(), name: name, holes: holes };
+    courses.push(c);
   }
   
+  try {
+    await sb.from('courses').upsert({ id: c.id, name: c.name, holes: JSON.stringify(c.holes) });
+  } catch (e) {
+    console.error('Save error:', e);
+  }
   renderDashboard();
   show('dashboardView');
 }
@@ -224,11 +374,10 @@ function saveCourse() {
 function startRound(id) {
   const c = courses.find(x => x.id === id);
   if (!c) return;
-  
-  currentRoundCourseId = id;
+  currentRound = { courseId: id, date: new Date().toISOString().split('T')[0], scores: {}, clubs: {}, notes: {} };
+  postData = { video: '', photos: '', notes: '' };
   document.getElementById('roundTitle').textContent = c.name + ' - 라운드 기록';
-  document.getElementById('roundDate').valueAsDate = new Date();
-  
+  document.getElementById('roundDate').value = currentRound.date;
   renderHoleInputs(c);
   show('roundView');
 }
@@ -238,32 +387,20 @@ function renderHoleInputs(course) {
   for (let i = 0; i < course.holes.length; i++) {
     const par = course.holes[i];
     const holeNum = i + 1;
-    
-    html += '<div class="hole-card"><div class="hole-number">홀 ' + holeNum + ' (Par ' + par + ')</div>';
-    html += '<div style="margin-bottom: 8px;"><label style="font-size: 0.85em; color: #666; display: block; margin-bottom: 3px;">클럽 순서</label>';
-    html += '<div class="club-grid">';
-    
+    html += '<div class="hole-card"><div class="hole-number">홀 ' + holeNum + ' (Par ' + par + ')</div><div style="margin-bottom: 8px;"><label style="font-size: 0.85em; color: #666; display: block; margin-bottom: 3px;">클럽 순서</label><div class="club-grid">';
     for (let j = 0; j < 8; j++) {
       html += '<select id="club_' + holeNum + '_' + j + '" onchange="updateLive()"><option value="">-</option>';
       CLUBS.forEach(c => html += '<option value="' + c + '">' + c + '</option>');
       html += '</select>';
     }
-    
-    html += '</div></div>';
-    html += '<div style="margin-bottom: 8px;"><label style="font-size: 0.85em; color: #666; display: block; margin-bottom: 3px;">스코어</label><input type="number" id="score_' + holeNum + '" placeholder="스코어" min="1" max="15" onchange="updateLive()" style="width: 100%; padding: 6px;"></div>';
-    html += '</div>';
+    html += '</div></div><div style="margin-bottom: 8px;"><label style="font-size: 0.85em; color: #666; display: block; margin-bottom: 3px;">스코어</label><input type="number" id="score_' + holeNum + '" placeholder="스코어" min="1" max="15" onchange="updateLive()" style="width: 100%; padding: 6px;"></div></div>';
   }
-  
   document.getElementById('holeInputGrid').innerHTML = html;
-  updateLive();
 }
 
 function updateLive() {
-  let totalScore = 0;
-  let totalPar = 0;
-  let played = false;
-  
-  const course = courses.find(c => c.id === currentRoundCourseId);
+  let totalScore = 0, totalPar = 0, played = false;
+  const course = courses.find(c => c.id === currentRound.courseId);
   if (!course) return;
   
   course.holes.forEach((par, idx) => {
@@ -271,8 +408,17 @@ function updateLive() {
     const scoreEl = document.getElementById('score_' + holeNum);
     if (scoreEl && scoreEl.value) {
       played = true;
-      totalScore += parseInt(scoreEl.value);
+      const score = parseInt(scoreEl.value);
+      totalScore += score;
       totalPar += par;
+      currentRound.scores[holeNum] = score;
+      
+      const clubs = [];
+      for (let j = 0; j < 8; j++) {
+        const clubEl = document.getElementById('club_' + holeNum + '_' + j);
+        if (clubEl && clubEl.value) clubs.push(clubEl.value);
+      }
+      if (clubs.length > 0) currentRound.clubs[holeNum] = clubs;
     }
   });
   
@@ -280,7 +426,71 @@ function updateLive() {
   document.getElementById('liveVsPar').textContent = played ? (totalScore - totalPar > 0 ? '+' : '') + (totalScore - totalPar) : '-';
 }
 
-renderDashboard();
+function goPost() {
+  updateLive();
+  const course = courses.find(c => c.id === currentRound.courseId);
+  if (!course) return;
+  
+  let html = '';
+  course.holes.forEach((par, idx) => {
+    const holeNum = idx + 1;
+    const score = currentRound.scores[holeNum];
+    const clubs = currentRound.clubs[holeNum];
+    html += '<div class="hole-card"><div class="hole-number">홀 ' + holeNum + ' · 스코어 ' + (score || '-') + '</div>';
+    if (clubs) html += '<div style="background: #eef3ff; padding: 8px; border-radius: 4px; margin-bottom: 8px; font-size: 0.82em;">🏌️ 사용 클럽: ' + clubs.join(' → ') + '</div>';
+    html += '<div class="input-field"><label>실제 거리/상황</label><input type="text" id="post_' + holeNum + '" placeholder="예: DR 160m → 5i"></div></div>';
+  });
+  document.getElementById('postGrid').innerHTML = html;
+  show('postView');
+}
+
+function goExport() {
+  postData.video = document.getElementById('m_video').value;
+  postData.photos = document.getElementById('m_photos').value.split('\n').filter(u => u.trim());
+  postData.notes = document.getElementById('m_notes').value;
+  
+  const course = courses.find(c => c.id === currentRound.courseId);
+  if (!course) return;
+  
+  const total = Object.values(currentRound.scores).reduce((s, v) => s + parseInt(v || 0), 0);
+  const par = course.holes.reduce((s, p) => s + p, 0);
+  
+  let rows = '';
+  course.holes.forEach((holePar, idx) => {
+    const holeNum = idx + 1;
+    const sc = currentRound.scores[holeNum] || '-';
+    const vp = sc !== '-' ? parseInt(sc) - holePar : null;
+    const vpt = vp === null ? '-' : (vp === 0 ? 'E' : (vp > 0 ? '+' + vp : vp));
+    const clubs = currentRound.clubs[holeNum] ? currentRound.clubs[holeNum].join(' → ') : '-';
+    rows += '<tr><td>' + holeNum + '</td><td>' + holePar + '</td><td><b>' + sc + '</b></td><td>' + vpt + '</td><td>' + clubs + '</td></tr>';
+  });
+  
+  let vid = '';
+  if (postData.video) {
+    let id = postData.video.includes('watch?v=') ? postData.video.split('watch?v=')[1].split('&')[0] : (postData.video.includes('youtu.be/') ? postData.video.split('youtu.be/')[1].split('?')[0] : postData.video);
+    vid = '<div style="position:relative;width:100%;padding-bottom:56.25%;margin-bottom:24px;background:#000;border-radius:8px;overflow:hidden;"><iframe src="https://www.youtube.com/embed/' + id + '" style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;" allowfullscreen></iframe></div>';
+  }
+  
+  let gal = '';
+  if (postData.photos.length) {
+    gal = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:24px;">' + postData.photos.map(u => '<img src="' + u.trim() + '" style="width:100%;border-radius:8px;">').join('') + '</div>';
+  }
+  
+  const code = '<div style="max-width:900px;margin:0 auto;font-family:\'Noto Sans KR\',sans-serif;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.1);"><div style="background:linear-gradient(135deg,#2c5aa0,#1e3a5f);color:#fff;padding:36px 28px;text-align:center;"><h1 style="font-size:2.2em;margin-bottom:12px;">⛳ ' + course.name + '</h1><div style="font-size:0.95em;">📅 ' + currentRound.date + ' · 총 스코어 ' + (total || '-') + ' (Par ' + par + ')</div></div><div style="padding:36px 28px;">' + vid + gal + '<h2 style="font-size:1.4em;color:#1e3a5f;margin-bottom:16px;padding-bottom:8px;border-bottom:3px solid #2c5aa0;">📊 라운드 기록</h2><table style="width:100%;border-collapse:collapse;font-size:0.85em;margin-bottom:28px;"><tr style="background:#2c5aa0;color:#fff;"><th style="padding:10px;">홀</th><th>Par</th><th>스코어</th><th>vs Par</th><th>사용 클럽</th></tr>' + rows + '</table>' + (postData.notes ? '<h2 style="font-size:1.4em;color:#1e3a5f;margin-bottom:16px;padding-bottom:8px;border-bottom:3px solid #2c5aa0;">💭 회고</h2><div style="background:#f0f4ff;padding:22px;border-radius:8px;border-left:5px solid #2c5aa0;white-space:pre-wrap;">' + postData.notes + '</div>' : '') + '</div><div style="background:#f8f9fa;padding:18px;text-align:center;color:#999;font-size:0.85em;">⛳ 골프 라운드 기록</div></div>';
+  
+  document.getElementById('codeOut').textContent = code;
+  show('exportView');
+}
+
+function copyCode() {
+  navigator.clipboard.writeText(document.getElementById('codeOut').textContent).then(() => {
+    const m = document.getElementById('copyMsg');
+    m.style.display = 'block';
+    setTimeout(() => m.style.display = 'none', 3000);
+  });
+}
+
+initSupabase();
 </script>
 </body>
 </html>
