@@ -764,8 +764,8 @@ function showSlopeTab(id, btn) {
 
 function show(id){ document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); document.getElementById(id).classList.add('active'); window.scrollTo(0,0); }
 
-loadCourses();
 initSupabase();
+setTimeout(loadCourses, 300);
 </script>
 </body>
 </html>
