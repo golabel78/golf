@@ -89,7 +89,9 @@ body { font-family:'Noto Sans KR',-apple-system,sans-serif; background:linear-gr
 .slope-checks li { font-size:11px; color:#666; line-height:1.7; padding-left:10px; position:relative; }
 .slope-checks li::before { content:"·"; position:absolute; left:2px; }
 .slope-checks li strong { color:#1a1a1a; }
-@media(max-width:768px){ .header h1{font-size:1.5em;} .hole-grid{grid-template-columns:1fr;} .button-group{flex-direction:column;} .hole-edit-row{grid-template-columns:40px 1fr 1fr;} .slope-body{grid-template-columns:1fr 1fr;} .slope-cell{border-bottom:0.5px solid #f0f0f0;} }
+.club-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; margin-bottom:6px; }
+.club-grid select { width:100%; padding:6px; border:1px solid #ddd; border-radius:4px; font-size:0.9em; font-family:inherit; }
+@media(max-width:768px){ .header h1{font-size:1.5em;} .hole-grid{grid-template-columns:1fr;} .button-group{flex-direction:column;} .hole-edit-row{grid-template-columns:40px 1fr 1fr;} .slope-body{grid-template-columns:1fr 1fr;} .slope-cell{border-bottom:0.5px solid #f0f0f0;} .club-grid{grid-template-columns:repeat(2,1fr);} }
 </style>
 </head>
 <body>
@@ -875,7 +877,7 @@ async function beforeGoPrep() {
 }
 
 function holeInputCard(h){
-  const shots = current.clubs[h.number] || ['','','','',''];
+  const shots = current.clubs[h.number] || ['','','','','','','',''];
   const used = shots.filter(s=>s);
   let putts = used.filter(s=>s==='PT').length;
   let firstPutt = used.findIndex(s=>s==='PT');
@@ -894,15 +896,15 @@ function holeInputCard(h){
     const diffText = diff>0?`+${diff}`:(diff===0?'E':`${diff}`);
     scoreLabel = `${strokes}타 (${diffText}, ${names[String(diff)]||diffText})`;
   }
-  const clubSelects = [0,1,2,3,4].map(idx=>`
-    <select onchange="setClub(${h.number},${idx},this.value)" style="margin-bottom:4px;">
-      <option value="">${idx+1}번째 클럽</option>
+  const clubSelects = [0,1,2,3,4,5,6,7].map(idx=>`
+    <select onchange="setClub(${h.number},${idx},this.value)">
+      <option value="">${idx+1}번째</option>
       ${CLUBS.map(c=>`<option value="${c}" ${shots[idx]===c?'selected':''}>${c}</option>`).join('')}
     </select>`).join('');
   return `<div class="hole-card">
     <div class="hole-number">홀 ${h.number} (Par ${h.par})</div>
     ${h.map?`<img src="${h.map}" style="width:100%;border-radius:6px;margin-bottom:8px;">`:''}
-    <div class="hole-input"><label>샷 순서대로 클럽 선택 (타수 자동 계산)</label>${clubSelects}</div>
+    <div class="hole-input"><label>샷 순서대로 클럽 선택 (타수 자동 계산)</label><div class="club-grid">${clubSelects}</div></div>
     ${resultText?`<div style="background:#e8f5e9;color:#2e7d32;padding:6px 10px;border-radius:6px;font-weight:600;font-size:0.9em;text-align:center;margin-bottom:6px;">⛳ ${resultText}</div>`:''}
     ${scoreLabel?`<div style="background:#2a5298;color:#fff;padding:8px 10px;border-radius:6px;font-weight:700;font-size:1em;text-align:center;margin-bottom:8px;">${scoreLabel}</div>`:''}
     <div class="hole-input"><label>전략·메모</label><input type="text" value="${current.notes[h.number]||''}" onchange="setInputNote(${h.number}, this.value)" placeholder="샷·전략 코멘트"></div>
@@ -910,7 +912,7 @@ function holeInputCard(h){
 }
 
 async function setClub(holeNum, idx, val){
-  if (!Array.isArray(current.clubs[holeNum])) current.clubs[holeNum] = ['','','','',''];
+  if (!Array.isArray(current.clubs[holeNum])) current.clubs[holeNum] = ['','','','','','','',''];
   current.clubs[holeNum][idx] = val;
   const strokes = current.clubs[holeNum].filter(s=>s).length;
   current.scores[holeNum] = strokes>0 ? strokes : '';
