@@ -193,7 +193,20 @@ body { font-family:'Noto Sans KR',-apple-system,sans-serif; background:linear-gr
     <div class="input-field"><label>📸 사진 URL (한 줄에 하나씩)</label><textarea id="m_photos" rows="4" placeholder="https://.../photo1.jpg"></textarea></div>
     <h2 class="section-title" style="margin-top:24px;">💭 회고</h2>
     <div class="input-field"><textarea id="m_notes" rows="5" placeholder="라운드 회고, 느낀 점, 다음 목표..."></textarea></div>
-    <div class="button-group"><button class="btn btn-success" onclick="goExport()">✓ 블로그 포스트 생성</button></div>
+    <div class="button-group"><button class="btn btn-primary" onclick="renderReport();show('reportView');">📊 분석 리포트</button><button class="btn btn-success" onclick="goExport()">✓ 블로그 포스트 생성</button></div>
+  </div>
+</div>
+
+<!-- 분석 리포트 -->
+<div id="reportView" class="view">
+  <span class="back-btn" onclick="show('postView')">← 라운드 후 기록</span>
+  <div class="card">
+    <h2 class="section-title">📊 라운드 분석 리포트</h2>
+    <div id="reportBody"></div>
+    <div class="button-group" style="margin-top:18px;">
+      <button class="btn btn-success" onclick="finalizeRound()">🏁 라운드 완료 (기록 저장)</button>
+      <button class="btn btn-secondary" onclick="show('dashboardView')">대시보드</button>
+    </div>
   </div>
 </div>
 
@@ -508,7 +521,7 @@ function initSupabase() {
   initSupabase();
 }
 
-const CLUBS = ['DR','3W','HY','5i','6i','7i','8i','9i','PW','52','56','PT'];
+const CLUBS = ['DR','3W','HY','5i','6i','7i','8i','9i','PW','48','52','56','PT'];
 const SEED = [{"id":"1","name":"Solmoro CC","holes":[{"number":1,"par":4,"dist":""},{"number":2,"par":4,"dist":""},{"number":3,"par":3,"dist":""},{"number":4,"par":5,"dist":""},{"number":5,"par":4,"dist":""},{"number":6,"par":3,"dist":""},{"number":7,"par":4,"dist":""},{"number":8,"par":5,"dist":""},{"number":9,"par":4,"dist":""},{"number":10,"par":4,"dist":""},{"number":11,"par":4,"dist":""},{"number":12,"par":3,"dist":""},{"number":13,"par":5,"dist":""},{"number":14,"par":4,"dist":""},{"number":15,"par":3,"dist":""},{"number":16,"par":4,"dist":""},{"number":17,"par":5,"dist":""},{"number":18,"par":4,"dist":""}]},{"id":"2","name":"엘리시안 강촌cc 레이크코스","holes":[{"number":1,"par":4,"dist":"310"},{"number":2,"par":5,"dist":"402"},{"number":3,"par":3,"dist":"130"},{"number":4,"par":4,"dist":"255"},{"number":5,"par":4,"dist":"122"},{"number":6,"par":5,"dist":"390"},{"number":7,"par":3,"dist":"93"},{"number":8,"par":5,"dist":"415"},{"number":9,"par":4,"dist":"338"}]},{"id":"3","name":"엘리시안 제주cc 레이크 코스","holes":[{"number":1,"par":5,"dist":"408"},{"number":2,"par":4,"dist":"296"},{"number":3,"par":3,"dist":"127"},{"number":4,"par":4,"dist":"270"},{"number":5,"par":4,"dist":"305"},{"number":6,"par":3,"dist":"382"},{"number":7,"par":3,"dist":"97"},{"number":8,"par":4,"dist":"285"},{"number":9,"par":4,"dist":"300"}]},{"id":"4","name":"엘리시안 강촌cc 힐코스","holes":[{"number":1,"par":4,"dist":"235"},{"number":2,"par":5,"dist":"370"},{"number":3,"par":4,"dist":"270"},{"number":4,"par":3,"dist":"105"},{"number":5,"par":4,"dist":"285"},{"number":6,"par":4,"dist":"280"},{"number":7,"par":5,"dist":"375"},{"number":8,"par":3,"dist":"111"},{"number":9,"par":4,"dist":"301"}]},{"id":"5","name":"스카이 밸리cc 스카이코스","holes":[{"number":1,"par":4,"dist":"326"},{"number":2,"par":5,"dist":"461"},{"number":3,"par":4,"dist":"299"},{"number":4,"par":3,"dist":"128"},{"number":5,"par":5,"dist":"396"},{"number":6,"par":4,"dist":"289"},{"number":7,"par":3,"dist":"120"},{"number":8,"par":4,"dist":"373"},{"number":9,"par":4,"dist":"350"}]},{"id":"6","name":"스카이 밸리cc 밸리코스","holes":[{"number":1,"par":4,"dist":"303"},{"number":2,"par":5,"dist":"454"},{"number":3,"par":3,"dist":"141"},{"number":4,"par":4,"dist":"322"},{"number":5,"par":4,"dist":"356"},{"number":6,"par":4,"dist":"317"},{"number":7,"par":3,"dist":"109"},{"number":8,"par":5,"dist":"426"},{"number":9,"par":4,"dist":"329"}]},{"id":"7","name":"H1cc 레이크 코스","holes":[{"number":1,"par":4,"dist":"304"},{"number":2,"par":5,"dist":"396"},{"number":3,"par":3,"dist":"249"},{"number":4,"par":5,"dist":"287"},{"number":5,"par":4,"dist":"125"},{"number":6,"par":3,"dist":"246"},{"number":7,"par":4,"dist":"452"},{"number":8,"par":5,"dist":"94"},{"number":9,"par":4,"dist":"256"}]},{"id":"8","name":"H1cc 마운틴 코스","holes":[{"number":1,"par":4,"dist":"246"},{"number":2,"par":4,"dist":"252"},{"number":3,"par":4,"dist":"270"},{"number":4,"par":4,"dist":"242"},{"number":5,"par":3,"dist":"110"},{"number":6,"par":3,"dist":"306"},{"number":7,"par":4,"dist":"228"},{"number":8,"par":5,"dist":"107"},{"number":9,"par":4,"dist":"400"}]}];
 
 let courses = [];
@@ -724,6 +737,8 @@ async function saveRoundSessionToDB() {
       return false;
     }
     showSaveIndicator();
+    // planned_clubs는 별도 저장 (컬럼 미존재 시에도 메인 저장에 영향 없음)
+    try { await sb.from('round_sessions').update({ planned_clubs: current.plannedClubs }).eq('id', current.sessionId); } catch(e) {}
     return true;
   } catch(e) {
     console.error('저장 중 오류:', e);
@@ -762,6 +777,8 @@ async function startRound(id){
     notes: {},
     actualClubs: {},
     postNotes: {},
+    plannedClubs: {},
+    status: 'in_progress',
     sessionId: 's_' + Date.now(),
     date: new Date().toISOString().split('T')[0],
     weather: '맑음',
@@ -772,13 +789,14 @@ async function startRound(id){
   };
   
   const existing = await loadRoundSessionFromDB(id);
-  if (existing) {
+  if (existing && existing.status !== 'completed') {
     current.goals = existing.goals || {};
     current.scores = existing.scores || {};
     current.clubs = existing.clubs || {};
     current.notes = existing.notes || {};
     current.actualClubs = existing.actual_clubs || {};
     current.postNotes = existing.post_notes || {};
+    current.plannedClubs = existing.planned_clubs || {};
     current.weather = existing.weather || '맑음';
     current.temp = existing.temp || '28°C';
     current.front9 = existing.front9 || '';
@@ -810,6 +828,26 @@ async function setGoal(holeNum, value) {
   await saveRoundSessionToDB();
 }
 
+async function setPlannedClub(holeNum, idx, val){
+  if (!Array.isArray(current.plannedClubs[holeNum])) current.plannedClubs[holeNum] = ['','','','',''];
+  current.plannedClubs[holeNum][idx] = val;
+  await saveRoundSessionToDB();
+}
+
+async function finalizeRound(){
+  if(!confirm('이 라운드를 완료 처리할까요?\n완료하면 기록으로 저장되고, 다음에 같은 코스를 시작하면 새 라운드로 시작됩니다.')) return;
+  await saveRoundSessionToDB();
+  current.status = 'completed';
+  // status 컬럼이 없으면 이 update만 실패하고 나머지는 정상 (graceful)
+  try {
+    const { error } = await sb.from('round_sessions').update({ status:'completed' }).eq('id', current.sessionId);
+    if (error) { alert('완료 저장은 됐지만 status 기록 실패: Supabase에 status 컬럼을 추가해야 라운드 히스토리 비교가 작동합니다.'); }
+    else { alert('✅ 라운드 완료 처리됨. 분석 리포트에서 확인하세요.'); }
+  } catch(e) { alert('status 컬럼이 없어 히스토리 비교가 제한됩니다.'); }
+  renderReport();
+  show('reportView');
+}
+
 const MY_CLUBS = [
   {name:'DR', dist:160},
   {name:'3W', dist:145},
@@ -821,8 +859,13 @@ const MY_CLUBS = [
   {name:'9i', dist:85},
   {name:'PW', dist:80},
   {name:'48°', dist:70},
-  {name:'56°', dist:50}
+  {name:'52°', dist:65},
+  {name:'56°', dist:60}
 ];
+// 미스샷 분석용 거리표 (CLUBS 드롭다운 이름 기준). 웨지: PW80/48°70/52°65/56°60. PT는 분석 제외(0).
+const CLUB_DIST = {'DR':160,'3W':145,'HY':135,'5i':125,'6i':115,'7i':105,'8i':95,'9i':85,'PW':80,'48':70,'52':65,'56':60,'PT':0};
+// 라운드 전 전략에서 드라이버 외 세컨샷 이후 선택지 (티샷=index0만 DR 허용)
+const CLUBS_NO_DR = CLUBS.filter(c=>c!=='DR');
 
 function suggestStrategy(holeDist, par){
   let remain = parseInt(holeDist);
@@ -853,11 +896,20 @@ function suggestStrategy(holeDist, par){
 function renderPrep(){
   document.getElementById('prepGrid').innerHTML=current.course.holes.map(h=>{
     const strategy = suggestStrategy(h.dist, h.par);
+    const planned = Array.isArray(current.plannedClubs[h.number]) ? current.plannedClubs[h.number] : ['','','','',''];
+    const plannedSelects = [0,1,2,3,4].map(idx=>{
+      const opts = (idx===0 ? CLUBS : CLUBS_NO_DR);
+      return `<select onchange="setPlannedClub(${h.number},${idx},this.value)">
+        <option value="">${idx===0?'티샷':idx+1+'번째'}</option>
+        ${opts.map(c=>`<option value="${c}" ${planned[idx]===c?'selected':''}>${c}</option>`).join('')}
+      </select>`;
+    }).join('');
     return `
     <div class="hole-card">
       <div class="hole-number">홀 ${h.number} (Par ${h.par}${h.dist?', '+h.dist+'m':''})</div>
       ${h.map?`<img src="${h.map}" style="width:100%;border-radius:6px;margin-bottom:8px;">`:'<div style="background:#f0f0f0;color:#999;padding:20px;text-align:center;border-radius:6px;margin-bottom:8px;font-size:0.82em;">홀맵 없음 (코스 수정에서 등록)</div>'}
       ${strategy?`<div style="background:#e8f0ff;color:#1e3c72;padding:8px 10px;border-radius:6px;font-size:0.82em;margin-bottom:8px;"><b>🎯 추천 공략:</b><br>${strategy}</div>`:''}
+      <div class="hole-input"><label>🎯 예상 클럽 (샷 순서대로 · 미스샷 분석 기준)</label><div class="club-grid">${plannedSelects}</div></div>
       <div class="hole-input"><label>📝 나의 목표 (시뮬레이션 후)</label><textarea onchange="setGoal(${h.number}, this.value)" style="min-height:55px;" placeholder="추천을 참고해 나만의 목표·전략 작성">${current.goals[h.number]||''}</textarea></div>
     </div>`;
   }).join('');
@@ -1010,6 +1062,145 @@ function renderPost(){
     html+=`<div class="nine-title">🏌️ Back 9: ${b}</div><div class="hole-grid">`+hs.slice(half).map(holePostCard).join('')+'</div>';
   }
   document.getElementById('postGrid').innerHTML=html;
+}
+
+let missThreshold = 30;
+function setMissThreshold(v){ missThreshold = Number(v); const el=document.getElementById('thVal'); if(el) el.textContent=v+'m'; buildReportBody(); }
+
+async function loadCompletedSessions(courseId, excludeId){
+  try{
+    const { data, error } = await sb.from('round_sessions').select('*').eq('course_id',courseId).order('round_date',{ascending:false});
+    if(error||!data) return [];
+    return data.filter(d=>d.id!==excludeId && d.status==='completed');
+  }catch(e){ return []; }
+}
+
+let _reportHistory = [];
+async function renderReport(){
+  document.getElementById('reportBody').innerHTML = '<div style="padding:20px;text-align:center;color:#999;">분석 중...</div>';
+  _reportHistory = await loadCompletedSessions(current.course.id, current.sessionId);
+  buildReportBody();
+}
+
+function buildReportBody(){
+  const hs = current.course.holes;
+  const scores = current.scores, clubs = current.clubs, planned = current.plannedClubs;
+
+  // === #2 홀 유형별 ===
+  const byPar = {3:{n:0,over:0},4:{n:0,over:0},5:{n:0,over:0}};
+  let totalScore=0, totalPar=0, scored=0;
+  const holeDiffs=[];
+  hs.forEach(h=>{
+    const s=Number(scores[h.number]); if(!s) return;
+    scored++; totalScore+=s; totalPar+=h.par;
+    const d=s-h.par;
+    if(byPar[h.par]){ byPar[h.par].n++; byPar[h.par].over+=d; }
+    holeDiffs.push({num:h.number,par:h.par,score:s,diff:d});
+  });
+
+  // === #3 온/퍼트 ===
+  let gir=0, putts=0, three=0, holesWithData=0;
+  hs.forEach(h=>{
+    const arr=Array.isArray(clubs[h.number])?clubs[h.number].filter(x=>x):[];
+    if(!arr.length) return;
+    holesWithData++;
+    const p=arr.filter(x=>x==='PT').length;
+    const fp=arr.findIndex(x=>x==='PT');
+    const onShots=fp===-1?arr.length:fp;
+    putts+=p; if(p>=3) three++;
+    if(fp!==-1 && onShots<=h.par-2) gir++;
+  });
+
+  // === #1 미스샷 ===
+  const misses=[];
+  hs.forEach(h=>{
+    const p=Array.isArray(planned[h.number])?planned[h.number]:[];
+    const a=Array.isArray(clubs[h.number])?clubs[h.number]:[];
+    const len=Math.max(p.length,a.length);
+    for(let i=0;i<len;i++){
+      const pc=p[i], ac=a[i];
+      if(!pc||!ac||pc==='PT'||ac==='PT') continue;
+      const pd=CLUB_DIST[pc], ad=CLUB_DIST[ac];
+      if(pd==null||ad==null) continue;
+      const diff=pd-ad;
+      if(Math.abs(diff)>missThreshold) misses.push({num:h.number,shot:i+1,pc,pd,ac,ad,diff});
+    }
+  });
+
+  let html='';
+  if(scored===0){
+    html='<div style="padding:20px;text-align:center;color:#999;">아직 입력된 스코어가 없습니다. 라운드 입력 화면에서 클럽·스코어를 먼저 기록하세요.</div>';
+    document.getElementById('reportBody').innerHTML=html;
+    return;
+  }
+
+  // 요약
+  const tot=totalScore-totalPar;
+  html+=`<div style="background:linear-gradient(135deg,#2a5298,#1e3c72);color:#fff;padding:16px;border-radius:8px;text-align:center;margin-bottom:16px;">
+    <div style="font-size:1.8em;font-weight:bold;">${totalScore} <span style="font-size:0.55em;opacity:0.85;">(${tot>0?'+':''}${tot})</span></div>
+    <div style="font-size:0.82em;opacity:0.9;">${scored}홀 기준 · Par ${totalPar}</div></div>`;
+
+  // #1 미스샷
+  html+=`<h3 style="color:#1e3c72;margin:18px 0 6px;font-size:1.05em;">🎯 미스샷 분석</h3>`;
+  html+=`<div style="background:#f0f4ff;padding:10px;border-radius:6px;margin-bottom:10px;font-size:0.85em;">
+    미스샷 기준: 예상 클럽과 실제 클럽의 거리차 <b id="thVal">${missThreshold}m</b> 초과<br>
+    <input type="range" min="10" max="50" step="5" value="${missThreshold}" oninput="setMissThreshold(this.value)" style="width:100%;margin-top:8px;">
+    <div style="font-size:0.75em;color:#888;">10m ↔ 50m · 이하면 코스 전략상 클럽 변경, 초과면 미스샷 추정</div></div>`;
+  if(misses.length===0){
+    html+=`<div style="background:#e8f5e9;color:#2e7d32;padding:10px;border-radius:6px;font-size:0.88em;margin-bottom:6px;">✅ 기준 초과 미스샷 없음 (예상 클럽이 없거나 PT 샷은 분석 제외)</div>`;
+  }else{
+    html+=`<div style="background:#fff3e0;color:#e65100;padding:8px 10px;border-radius:6px;font-size:0.85em;margin-bottom:8px;">미스샷 추정 ${misses.length}건</div>`;
+    misses.forEach(m=>{
+      const sign=m.diff>0?'짧게(예상보다 가까운 클럽)':'길게(예상보다 먼 클럽)';
+      html+=`<div style="border-left:4px solid #ff9800;background:#fff;padding:8px 10px;margin-bottom:6px;border-radius:4px;font-size:0.85em;">
+        <b>홀 ${m.num} · ${m.shot}번째 샷</b><br>예상 ${m.pc}(${m.pd}m) → 실제 ${m.ac}(${m.ad}m) · 차이 ${Math.abs(m.diff)}m ${sign}</div>`;
+    });
+  }
+
+  // #2 홀 유형별
+  html+=`<h3 style="color:#1e3c72;margin:20px 0 6px;font-size:1.05em;">📐 홀 유형별 성적</h3>`;
+  html+=`<table style="width:100%;border-collapse:collapse;font-size:0.85em;margin-bottom:10px;"><tr style="background:#2a5298;color:#fff;"><th style="padding:6px;">유형</th><th>홀수</th><th>평균 (vs Par)</th></tr>`;
+  [3,4,5].forEach(par=>{
+    const b=byPar[par]; if(!b.n) return;
+    const avg=(b.over/b.n);
+    html+=`<tr style="border-bottom:1px solid #eee;text-align:center;"><td style="padding:6px;">Par ${par}</td><td>${b.n}</td><td>${avg>0?'+':''}${avg.toFixed(1)}</td></tr>`;
+  });
+  html+=`</table>`;
+  const worst=[...holeDiffs].sort((a,b)=>b.diff-a.diff).slice(0,3).filter(x=>x.diff>0);
+  if(worst.length){
+    html+=`<div style="font-size:0.85em;color:#555;margin-bottom:6px;">타수 손실 큰 홀: `+worst.map(w=>`홀 ${w.num}(+${w.diff})`).join(', ')+`</div>`;
+  }
+
+  // #3 온/퍼트
+  html+=`<h3 style="color:#1e3c72;margin:20px 0 6px;font-size:1.05em;">⛳ 온/퍼트 분석</h3>`;
+  const girPct=holesWithData?Math.round(gir/holesWithData*100):0;
+  const avgPutt=holesWithData?(putts/holesWithData).toFixed(2):'-';
+  html+=`<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">
+    <div style="background:#eef3ff;padding:10px;border-radius:6px;text-align:center;"><div style="font-size:1.3em;font-weight:bold;color:#1e3c72;">${gir}/${holesWithData}</div><div style="font-size:0.72em;color:#666;">그린적중(GIR) ${girPct}%</div></div>
+    <div style="background:#eef3ff;padding:10px;border-radius:6px;text-align:center;"><div style="font-size:1.3em;font-weight:bold;color:#1e3c72;">${avgPutt}</div><div style="font-size:0.72em;color:#666;">홀당 평균 퍼트</div></div>
+    <div style="background:#eef3ff;padding:10px;border-radius:6px;text-align:center;"><div style="font-size:1.3em;font-weight:bold;color:${three>0?'#e65100':'#1e3c72'};">${three}</div><div style="font-size:0.72em;color:#666;">3퍼트 홀</div></div></div>`;
+  html+=`<div style="font-size:0.78em;color:#888;margin-bottom:6px;">총 퍼트 ${putts}회 · 클럽 기록 있는 ${holesWithData}홀 기준 (GIR=규정타 내 그린 도달)</div>`;
+
+  // #4 같은 코스 히스토리
+  html+=`<h3 style="color:#1e3c72;margin:20px 0 6px;font-size:1.05em;">📈 같은 코스 비교</h3>`;
+  if(!_reportHistory.length){
+    html+=`<div style="background:#f5f5f5;color:#888;padding:10px;border-radius:6px;font-size:0.85em;">비교할 과거 완료 라운드가 없습니다. 라운드를 완료 처리하면 다음부터 홀별 비교가 표시됩니다. (Supabase에 status 컬럼 필요)</div>`;
+  }else{
+    const prev=_reportHistory[0];
+    const ps=prev.scores||{};
+    html+=`<div style="font-size:0.82em;color:#555;margin-bottom:6px;">직전 완료 라운드(${prev.round_date}) 대비 홀별 변화</div>`;
+    html+=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(70px,1fr));gap:5px;">`;
+    hs.forEach(h=>{
+      const cur=Number(scores[h.number]), pv=Number(ps[h.number]);
+      if(!cur||!pv){ html+=`<div style="background:#f5f5f5;padding:6px;border-radius:4px;text-align:center;font-size:0.75em;color:#bbb;">H${h.number}<br>-</div>`; return; }
+      const d=cur-pv;
+      const col=d<0?'#2e7d32':(d>0?'#c62828':'#888');
+      html+=`<div style="background:#fff;border:1px solid #eee;padding:6px;border-radius:4px;text-align:center;font-size:0.75em;"><b>H${h.number}</b><br><span style="color:${col};font-weight:bold;">${d<0?'▼':(d>0?'▲':'=')}${d!==0?Math.abs(d):''}</span></div>`;
+    });
+    html+=`</div><div style="font-size:0.72em;color:#888;margin-top:4px;">▼초록=개선 ▲빨강=악화</div>`;
+  }
+
+  document.getElementById('reportBody').innerHTML=html;
 }
 
 function goExport(){ document.getElementById('codeOut').textContent=buildBlogHTML(); show('exportView'); }
