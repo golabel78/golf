@@ -56,6 +56,9 @@ body { font-family:'Noto Sans KR',-apple-system,sans-serif; background:linear-gr
 .hole-edit-row { display:grid; grid-template-columns:50px 1fr 1fr; gap:8px; align-items:center; margin-bottom:8px; padding:8px; background:#f8fbff; border-radius:6px; }
 .hole-edit-row span { font-weight:bold; color:#2a5298; }
 .hole-edit-row input, .hole-edit-row select { padding:6px; border:1px solid #ddd; border-radius:4px; font-size:0.85em; }
+.unit-bar { display:flex; gap:6px; align-items:center; margin-bottom:12px; padding:10px; background:#eef3ff; border-radius:6px; flex-wrap:wrap; }
+.unit-btn { padding:6px 14px; border:1.5px solid #2a5298; border-radius:6px; background:#fff; color:#2a5298; font-weight:600; font-size:0.85em; cursor:pointer; }
+.unit-btn.active { background:#2a5298; color:#fff; }
 .map-upload-cell { grid-column:1/-1; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 .map-upload-cell label.upbtn { background:#2a5298; color:#fff; padding:7px 14px; border-radius:6px; cursor:pointer; font-size:0.82em; font-weight:600; }
 .map-upload-cell img { height:50px; border-radius:4px; border:1px solid #ccc; }
@@ -528,6 +531,8 @@ let courses = [];
 let current = { course:null, goals:{}, scores:{}, clubs:{}, notes:{}, actualClubs:{}, postNotes:{}, sessionId:null, date:null, weather:'', temp:'', front9:'', back9:'', greenspeed:'' };
 let editingCourseId = null;
 let editMaps = {};
+let editUnit = 'm'; // 코스 거리 입력 단위 (저장은 항상 m로 변환)
+const YD_TO_M = 0.9144;
 
 function setStatus(type, text) {
   const el = document.getElementById('cloudStatus');
@@ -654,8 +659,15 @@ function renderHoleEditor(existing) {
   const defaults9 = [4,4,3,5,4,3,4,5,4];
   const defaults = count===9?defaults9:defaults18;
   editMaps = {};
+  editUnit = 'm'; // 코스 열 때 항상 m로 시작 (저장값이 m이므로)
   if(existing) existing.forEach((h,i)=>{ if(h.map) editMaps[i]=h.map; });
   let html='';
+  html += `<div class="unit-bar">
+    <span style="font-weight:600;color:#1e3c72;font-size:0.85em;">거리 입력 단위:</span>
+    <button type="button" id="unitM" class="unit-btn active" onclick="setEditUnit('m')">미터(m)</button>
+    <button type="button" id="unitYd" class="unit-btn" onclick="setEditUnit('yd')">야드(yd)</button>
+    <span style="font-size:0.72em;color:#888;margin-left:auto;">야드로 넣어도 저장은 자동으로 m</span>
+  </div>`;
   for(let i=0;i<count;i++){
     const h = existing?existing[i]:null;
     const par = h?h.par:defaults[i];
@@ -694,13 +706,37 @@ function uploadMap(i,input){
 
 function clearMap(i){ delete editMaps[i]; document.getElementById('map_preview_'+i).innerHTML=''; }
 
+function setEditUnit(u){
+  if(u===editUnit) return;
+  const count = parseInt(document.getElementById('newCourseHoleCount').value);
+  for(let i=0;i<count;i++){
+    const el=document.getElementById('edit_dist_'+i);
+    if(!el) continue;
+    const v=parseFloat(el.value);
+    if(!isNaN(v)){
+      // 현재 단위(editUnit)에서 새 단위(u)로 변환
+      el.value = (u==='yd') ? Math.round(v/YD_TO_M) : Math.round(v*YD_TO_M);
+    }
+    el.placeholder='거리('+u+')';
+  }
+  editUnit=u;
+  document.getElementById('unitM').classList.toggle('active', u==='m');
+  document.getElementById('unitYd').classList.toggle('active', u==='yd');
+}
+
 async function saveCourse() {
   const name=document.getElementById('newCourseName').value.trim();
   if(!name){ alert('코스명을 입력하세요'); return; }
   const count=parseInt(document.getElementById('newCourseHoleCount').value);
   const holes=[];
   for(let i=0;i<count;i++){
-    holes.push({number:i+1, par:parseInt(document.getElementById('edit_par_'+i).value), dist:document.getElementById('edit_dist_'+i).value.trim(), map:editMaps[i]||''});
+    let distVal = document.getElementById('edit_dist_'+i).value.trim();
+    // 입력 단위가 야드면 미터로 변환해서 저장 (저장은 항상 m)
+    if(distVal!=='' && editUnit==='yd'){
+      const n=parseFloat(distVal);
+      if(!isNaN(n)) distVal=String(Math.round(n*YD_TO_M));
+    }
+    holes.push({number:i+1, par:parseInt(document.getElementById('edit_par_'+i).value), dist:distVal, map:editMaps[i]||''});
   }
   let c;
   if(editingCourseId){ c=courses.find(x=>x.id===editingCourseId); c.name=name; c.holes=holes; }
