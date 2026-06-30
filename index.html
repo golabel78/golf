@@ -776,6 +776,7 @@ async function saveRoundSessionToDB() {
     showSaveIndicator();
     // planned_clubs는 별도 저장 (컬럼 미존재 시에도 메인 저장에 영향 없음)
     try { await sb.from('round_sessions').update({ planned_clubs: current.plannedClubs }).eq('id', current.sessionId); } catch(e) {}
+    try { await sb.from('round_sessions').update({ planned_putts: current.plannedPutts }).eq('id', current.sessionId); } catch(e) {}
     return true;
   } catch(e) {
     console.error('저장 중 오류:', e);
@@ -815,6 +816,7 @@ async function startRound(id){
     actualClubs: {},
     postNotes: {},
     plannedClubs: {},
+    plannedPutts: {},
     status: 'in_progress',
     sessionId: 's_' + Date.now(),
     date: new Date().toISOString().split('T')[0],
@@ -834,6 +836,7 @@ async function startRound(id){
     current.actualClubs = existing.actual_clubs || {};
     current.postNotes = existing.post_notes || {};
     current.plannedClubs = existing.planned_clubs || {};
+    current.plannedPutts = existing.planned_putts || {};
     current.weather = existing.weather || '맑음';
     current.temp = existing.temp || '28°C';
     current.front9 = existing.front9 || '';
@@ -880,17 +883,76 @@ function updatePrepSummary(){
   if(!el || !current.course) return;
   const hs = current.course.holes;
   let strokes=0, par=0, planned=0;
+  const clubCount={};       // 클럽별 사용 횟수 (PT 제외)
+  let puttCount=0;          // 예상 퍼트 개수 (PT 선택 수)
+  const approaches=[];      // 어프로치(그린 진입 샷) 남은거리
+  const puttDists=[];       // 입력한 예상 퍼트거리 전체
+
   hs.forEach(h=>{
+    const arr = Array.isArray(current.plannedClubs[h.number]) ? current.plannedClubs[h.number].filter(x=>x) : [];
+    // 목표 합계
     const g = computeHoleGoal(current.plannedClubs[h.number]);
     if(g){ strokes += g.on+g.putt; par += Number(h.par)||0; planned++; }
+    // 클럽별 횟수 + 퍼트 개수
+    arr.forEach(c=>{ if(c==='PT') puttCount++; else clubCount[c]=(clubCount[c]||0)+1; });
+    // 어프로치 거리: 홀거리에서 마지막 풀스윙 샷 직전까지 클럽거리 빼기
+    const nonPutt = arr.filter(c=>c!=='PT');
+    const hd = parseInt(h.dist);
+    if(nonPutt.length && hd>0){
+      let remain = hd;
+      for(let i=0;i<nonPutt.length-1;i++){ remain -= (CLUB_DIST[nonPutt[i]]||0); }
+      if(remain<0) remain=0;
+      approaches.push({hole:h.number, dist:Math.round(remain)});
+    }
+    // 예상 퍼트거리 입력값
+    const pv = current.plannedPutts[h.number];
+    if(pv){ pv.split(',').forEach(x=>{ const n=parseFloat(x.trim()); if(!isNaN(n)) puttDists.push(n); }); }
   });
-  if(planned===0){ el.innerHTML=''; return; }
+
+  if(planned===0 && Object.keys(clubCount).length===0){ el.innerHTML=''; return; }
   const diff = strokes-par;
-  el.innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;">
+
+  // 1) 합계 박스
+  let html = `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;">
     <div class="score-box"><div class="score-number">${strokes}</div><div class="score-label">목표 총타수</div></div>
     <div class="score-box"><div class="score-number">${diff>0?'+':''}${diff}</div><div class="score-label">계획홀 Par 대비</div></div>
     <div class="score-box"><div class="score-number">${planned}/${hs.length}</div><div class="score-label">계획 완료 홀</div></div>
   </div>`;
+
+  // 2) 클럽별 연습 횟수
+  if(Object.keys(clubCount).length){
+    const order = CLUBS.filter(c=>c!=='PT');
+    const items = order.filter(c=>clubCount[c]).map(c=>`<span style="display:inline-block;background:#2a5298;color:#fff;padding:3px 9px;border-radius:12px;margin:2px;font-size:0.8em;">${c} ×${clubCount[c]}</span>`).join('');
+    html += `<div style="background:#f0f4ff;padding:10px;border-radius:6px;margin-bottom:10px;">
+      <div style="font-weight:600;color:#1e3c72;font-size:0.85em;margin-bottom:6px;">🏌️ 클럽별 예상 사용 횟수 (집중 연습용)</div>${items}</div>`;
+  }
+
+  // 3) 어프로치 연습 거리
+  if(approaches.length){
+    const list = approaches.map(a=>`홀${a.hole}: <b>${a.dist}m</b>`).join(' · ');
+    html += `<div style="background:#fff8e1;padding:10px;border-radius:6px;margin-bottom:10px;">
+      <div style="font-weight:600;color:#e65100;font-size:0.85em;margin-bottom:6px;">🎯 어프로치 연습 거리 (그린 진입 샷 기준)</div>
+      <div style="font-size:0.82em;line-height:1.7;">${list}</div></div>`;
+  }
+
+  // 4) 예상 퍼트
+  if(puttCount>0 || puttDists.length){
+    let pd='';
+    if(puttDists.length){
+      const sum=puttDists.reduce((s,x)=>s+x,0);
+      pd=` · 입력거리 ${puttDists.length}개 합 ${sum.toFixed(1)}m (${puttDists.map(x=>x+'m').join(', ')})`;
+    }
+    html += `<div style="background:#e8f5e9;padding:10px;border-radius:6px;margin-bottom:6px;">
+      <div style="font-weight:600;color:#2e7d32;font-size:0.85em;">⛳ 예상 퍼트: 총 ${puttCount}개${pd}</div></div>`;
+  }
+
+  el.innerHTML = html;
+}
+
+async function setPlannedPutt(holeNum, value){
+  current.plannedPutts[holeNum] = value;
+  updatePrepSummary();
+  await saveRoundSessionToDB();
 }
 
 async function setPlannedClub(holeNum, idx, val){
@@ -986,6 +1048,7 @@ function renderPrep(){
       ${h.map?`<img src="${h.map}" style="width:100%;border-radius:6px;margin-bottom:8px;">`:'<div style="background:#f0f0f0;color:#999;padding:20px;text-align:center;border-radius:6px;margin-bottom:8px;font-size:0.82em;">홀맵 없음 (코스 수정에서 등록)</div>'}
       ${strategy?`<div style="background:#e8f0ff;color:#1e3c72;padding:8px 10px;border-radius:6px;font-size:0.82em;margin-bottom:8px;"><b>🎯 추천 공략:</b><br>${strategy}</div>`:''}
       <div class="hole-input"><label>🎯 예상 클럽 (샷 순서대로 · 미스샷 분석 기준)</label><div class="club-grid">${plannedSelects}</div></div>
+      <div class="hole-input"><label>⛳ 예상 퍼트거리(m, 쉼표로 여러개)</label><input type="text" id="putt_${h.number}" value="${current.plannedPutts[h.number]||''}" onchange="setPlannedPutt(${h.number}, this.value)" placeholder="예: 5, 1.5"></div>
       <div class="hole-input"><label>📝 나의 목표 (예상 클럽 선택 시 자동 계산)</label><textarea id="goal_${h.number}" onchange="setGoal(${h.number}, this.value)" style="min-height:55px;" placeholder="예상 클럽을 고르면 ○온 ○펏 자동 입력">${current.goals[h.number]||''}</textarea></div>
     </div>`;
   }).join('');
@@ -1204,6 +1267,30 @@ function buildReportBody(){
     }
   });
 
+  // === 예상 vs 실제 일치/불일치 홀 + 클럽별 미스 집계 ===
+  let matchHoles=0, strategicHoles=0, missHoles=0, comparedHoles=0;
+  const clubMiss={}; // 예상 클럽별 미스샷(거리차 초과) 횟수
+  hs.forEach(h=>{
+    const p=Array.isArray(planned[h.number])?planned[h.number].filter(x=>x):[];
+    const a=Array.isArray(clubs[h.number])?clubs[h.number].filter(x=>x):[];
+    if(!p.length || !a.length) return;
+    comparedHoles++;
+    let allMatch=true, hasMiss=false;
+    const len=Math.max(p.length,a.length);
+    for(let i=0;i<len;i++){
+      const pc=p[i], ac=a[i];
+      if(!pc||!ac||pc==='PT'||ac==='PT') continue;
+      if(pc!==ac){
+        allMatch=false;
+        const pd=CLUB_DIST[pc], ad=CLUB_DIST[ac];
+        if(pd!=null && ad!=null && Math.abs(pd-ad)>missThreshold){ hasMiss=true; clubMiss[pc]=(clubMiss[pc]||0)+1; }
+      }
+    }
+    if(allMatch) matchHoles++;
+    else if(hasMiss) missHoles++;
+    else strategicHoles++;
+  });
+
   let html='';
   if(scored===0){
     html='<div style="padding:20px;text-align:center;color:#999;">아직 입력된 스코어가 없습니다. 라운드 입력 화면에서 클럽·스코어를 먼저 기록하세요.</div>';
@@ -1232,6 +1319,29 @@ function buildReportBody(){
       html+=`<div style="border-left:4px solid #ff9800;background:#fff;padding:8px 10px;margin-bottom:6px;border-radius:4px;font-size:0.85em;">
         <b>홀 ${m.num} · ${m.shot}번째 샷</b><br>예상 ${m.pc}(${m.pd}m) → 실제 ${m.ac}(${m.ad}m) · 차이 ${Math.abs(m.diff)}m ${sign}</div>`;
     });
+  }
+
+  // 예상 vs 실제 일치/불일치 + 클럽별 미스
+  html+=`<h3 style="color:#1e3c72;margin:20px 0 6px;font-size:1.05em;">🔍 예상 vs 실제 클럽 (계획 적중도)</h3>`;
+  if(comparedHoles===0){
+    html+=`<div style="background:#f5f5f5;color:#888;padding:10px;border-radius:6px;font-size:0.85em;margin-bottom:6px;">예상 클럽과 실제 클럽이 모두 입력된 홀이 없습니다.</div>`;
+  }else{
+    html+=`<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">
+      <div style="background:#e8f5e9;padding:10px;border-radius:6px;text-align:center;"><div style="font-size:1.3em;font-weight:bold;color:#2e7d32;">${matchHoles}</div><div style="font-size:0.72em;color:#666;">계획대로 (일치)</div></div>
+      <div style="background:#fff8e1;padding:10px;border-radius:6px;text-align:center;"><div style="font-size:1.3em;font-weight:bold;color:#e65100;">${strategicHoles}</div><div style="font-size:0.72em;color:#666;">전략적 변경 (${missThreshold}m이내)</div></div>
+      <div style="background:#ffebee;padding:10px;border-radius:6px;text-align:center;"><div style="font-size:1.3em;font-weight:bold;color:#c62828;">${missHoles}</div><div style="font-size:0.72em;color:#666;">미스샷 발생 홀</div></div></div>`;
+    html+=`<div style="font-size:0.75em;color:#888;margin-bottom:8px;">비교 ${comparedHoles}홀 기준 · 일치=클럽 동일, 전략적=다르지만 거리차 ${missThreshold}m이내, 미스샷=거리차 ${missThreshold}m초과</div>`;
+    const cm = Object.entries(clubMiss).sort((a,b)=>b[1]-a[1]);
+    if(cm.length){
+      html+=`<div style="background:#fff;border:1px solid #ffcdd2;border-radius:6px;padding:10px;margin-bottom:6px;">
+        <div style="font-weight:600;color:#c62828;font-size:0.85em;margin-bottom:6px;">🎯 클럽별 미스샷 (어느 클럽에서 많이 나왔나)</div>`;
+      cm.forEach(([club,cnt])=>{
+        html+=`<div style="display:flex;justify-content:space-between;font-size:0.85em;padding:3px 0;border-bottom:1px solid #f5f5f5;"><span>${club}</span><span style="color:#c62828;font-weight:bold;">${cnt}회</span></div>`;
+      });
+      html+=`<div style="font-size:0.72em;color:#888;margin-top:6px;">→ 가장 많은 클럽을 라운드 전 집중 연습</div></div>`;
+    }else{
+      html+=`<div style="background:#e8f5e9;color:#2e7d32;padding:10px;border-radius:6px;font-size:0.85em;margin-bottom:6px;">✅ ${missThreshold}m 초과 미스샷 없음</div>`;
+    }
   }
 
   // #2 홀 유형별
