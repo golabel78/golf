@@ -529,7 +529,8 @@ const CLUBS = ['DR','3W','HY','5i','6i','7i','8i','9i','PW','48','52','56','PT']
 const SEED = [{"id":"1","name":"Solmoro CC","holes":[{"number":1,"par":4,"dist":""},{"number":2,"par":4,"dist":""},{"number":3,"par":3,"dist":""},{"number":4,"par":5,"dist":""},{"number":5,"par":4,"dist":""},{"number":6,"par":3,"dist":""},{"number":7,"par":4,"dist":""},{"number":8,"par":5,"dist":""},{"number":9,"par":4,"dist":""},{"number":10,"par":4,"dist":""},{"number":11,"par":4,"dist":""},{"number":12,"par":3,"dist":""},{"number":13,"par":5,"dist":""},{"number":14,"par":4,"dist":""},{"number":15,"par":3,"dist":""},{"number":16,"par":4,"dist":""},{"number":17,"par":5,"dist":""},{"number":18,"par":4,"dist":""}]},{"id":"2","name":"엘리시안 강촌cc 레이크코스","holes":[{"number":1,"par":4,"dist":"310"},{"number":2,"par":5,"dist":"402"},{"number":3,"par":3,"dist":"130"},{"number":4,"par":4,"dist":"255"},{"number":5,"par":4,"dist":"122"},{"number":6,"par":5,"dist":"390"},{"number":7,"par":3,"dist":"93"},{"number":8,"par":5,"dist":"415"},{"number":9,"par":4,"dist":"338"}]},{"id":"3","name":"엘리시안 제주cc 레이크 코스","holes":[{"number":1,"par":5,"dist":"408"},{"number":2,"par":4,"dist":"296"},{"number":3,"par":3,"dist":"127"},{"number":4,"par":4,"dist":"270"},{"number":5,"par":4,"dist":"305"},{"number":6,"par":3,"dist":"382"},{"number":7,"par":3,"dist":"97"},{"number":8,"par":4,"dist":"285"},{"number":9,"par":4,"dist":"300"}]},{"id":"4","name":"엘리시안 강촌cc 힐코스","holes":[{"number":1,"par":4,"dist":"235"},{"number":2,"par":5,"dist":"370"},{"number":3,"par":4,"dist":"270"},{"number":4,"par":3,"dist":"105"},{"number":5,"par":4,"dist":"285"},{"number":6,"par":4,"dist":"280"},{"number":7,"par":5,"dist":"375"},{"number":8,"par":3,"dist":"111"},{"number":9,"par":4,"dist":"301"}]},{"id":"5","name":"스카이 밸리cc 스카이코스","holes":[{"number":1,"par":4,"dist":"326"},{"number":2,"par":5,"dist":"461"},{"number":3,"par":4,"dist":"299"},{"number":4,"par":3,"dist":"128"},{"number":5,"par":5,"dist":"396"},{"number":6,"par":4,"dist":"289"},{"number":7,"par":3,"dist":"120"},{"number":8,"par":4,"dist":"373"},{"number":9,"par":4,"dist":"350"}]},{"id":"6","name":"스카이 밸리cc 밸리코스","holes":[{"number":1,"par":4,"dist":"303"},{"number":2,"par":5,"dist":"454"},{"number":3,"par":3,"dist":"141"},{"number":4,"par":4,"dist":"322"},{"number":5,"par":4,"dist":"356"},{"number":6,"par":4,"dist":"317"},{"number":7,"par":3,"dist":"109"},{"number":8,"par":5,"dist":"426"},{"number":9,"par":4,"dist":"329"}]},{"id":"7","name":"H1cc 레이크 코스","holes":[{"number":1,"par":4,"dist":"304"},{"number":2,"par":5,"dist":"396"},{"number":3,"par":3,"dist":"249"},{"number":4,"par":5,"dist":"287"},{"number":5,"par":4,"dist":"125"},{"number":6,"par":3,"dist":"246"},{"number":7,"par":4,"dist":"452"},{"number":8,"par":5,"dist":"94"},{"number":9,"par":4,"dist":"256"}]},{"id":"8","name":"H1cc 마운틴 코스","holes":[{"number":1,"par":4,"dist":"246"},{"number":2,"par":4,"dist":"252"},{"number":3,"par":4,"dist":"270"},{"number":4,"par":4,"dist":"242"},{"number":5,"par":3,"dist":"110"},{"number":6,"par":3,"dist":"306"},{"number":7,"par":4,"dist":"228"},{"number":8,"par":5,"dist":"107"},{"number":9,"par":4,"dist":"400"}]}];
 
 let courses = [];
-let current = { course:null, goals:{}, scores:{}, clubs:{}, notes:{}, actualClubs:{}, actualPutts:{}, actualApproaches:{}, postNotes:{}, sessionId:null, date:null, weather:'', temp:'', front9:'', back9:'', greenspeed:'' };
+let current = { course:null, goals:{}, scores:{}, clubs:{}, notes:{}, actualClubs:{}, actualPutts:{}, actualApproaches:{}, waypoints:{}, postNotes:{}, sessionId:null, date:null, weather:'', temp:'', front9:'', back9:'', greenspeed:'' };
+let drawModeHole = null; // 홀맵 경로 그리기 모드 (홀번호 또는 null)
 let editingCourseId = null;
 let editMaps = {};
 let editUnit = 'm'; // 코스 거리 입력 단위 (저장은 항상 m로 변환)
@@ -779,6 +780,7 @@ async function saveRoundSessionToDB() {
     try { await sb.from('round_sessions').update({ planned_putts: current.plannedPutts }).eq('id', current.sessionId); } catch(e) {}
     try { await sb.from('round_sessions').update({ actual_putts: current.actualPutts }).eq('id', current.sessionId); } catch(e) {}
     try { await sb.from('round_sessions').update({ actual_approaches: current.actualApproaches }).eq('id', current.sessionId); } catch(e) {}
+    try { await sb.from('round_sessions').update({ waypoints: current.waypoints }).eq('id', current.sessionId); } catch(e) {}
     return true;
   } catch(e) {
     console.error('저장 중 오류:', e);
@@ -821,6 +823,7 @@ async function startRound(id){
     plannedPutts: {},
     actualPutts: {},
     actualApproaches: {},
+    waypoints: {},
     status: 'in_progress',
     sessionId: 's_' + Date.now(),
     date: new Date().toISOString().split('T')[0],
@@ -840,6 +843,7 @@ async function startRound(id){
     current.actualClubs = existing.actual_clubs || {};
     current.actualPutts = existing.actual_putts || {};
     current.actualApproaches = existing.actual_approaches || {};
+    current.waypoints = existing.waypoints || {};
     current.postNotes = existing.post_notes || {};
     current.plannedClubs = existing.planned_clubs || {};
     current.plannedPutts = existing.planned_putts || {};
@@ -1003,6 +1007,7 @@ async function setPlannedClub(holeNum, idx, val){
     if(pin) pin.value = String(ep);
   }
   updatePrepSummary();
+  refreshHoleMap(holeNum);
   await saveRoundSessionToDB();
 }
 
@@ -1067,6 +1072,105 @@ function suggestStrategy(holeDist, par){
   return plan.join(' → ');
 }
 
+// ===== 홀맵 경로(웨이포인트) → 클럽별 화살표 =====
+function computePathGeom(holeNum){
+  const wp = current.waypoints[holeNum];
+  if(!Array.isArray(wp) || wp.length<2) return null;
+  let segs=[], total=0;
+  for(let i=1;i<wp.length;i++){
+    const dx=wp[i].x-wp[i-1].x, dy=wp[i].y-wp[i-1].y;
+    const len=Math.hypot(dx,dy); segs.push(len); total+=len;
+  }
+  return {wp, segs, total};
+}
+function pointAtFrac(geom, frac){
+  let target=frac*geom.total, acc=0;
+  for(let i=0;i<geom.segs.length;i++){
+    if(acc+geom.segs[i] >= target || i===geom.segs.length-1){
+      const t = geom.segs[i]? (target-acc)/geom.segs[i] : 0;
+      const a=geom.wp[i], b=geom.wp[i+1];
+      return {x:a.x+(b.x-a.x)*Math.min(t,1), y:a.y+(b.y-a.y)*Math.min(t,1)};
+    }
+    acc+=geom.segs[i];
+  }
+  return geom.wp[geom.wp.length-1];
+}
+function holeMapInner(h){
+  if(!h.map) return '<div style="background:#f0f0f0;color:#999;padding:20px;text-align:center;border-radius:6px;margin-bottom:8px;font-size:0.82em;">홀맵 없음 (코스 수정에서 등록)</div>';
+  const drawing = (drawModeHole===h.number);
+  const wp = current.waypoints[h.number]||[];
+  // SVG (선/원) — 위치는 정규화 0~100, preserveAspectRatio none
+  let svg='';
+  if(wp.length){
+    if(wp.length>=2){
+      const pts = wp.map(p=>`${(p.x*100).toFixed(1)},${(p.y*100).toFixed(1)}`).join(' ');
+      svg += `<polyline points="${pts}" fill="none" stroke="#fff" stroke-width="1.4" stroke-dasharray="2,1.5" opacity="0.85"/>`;
+      svg += `<polyline points="${pts}" fill="none" stroke="#1e3c72" stroke-width="0.7" stroke-dasharray="2,1.5"/>`;
+    }
+    const tee=wp[0], pin=wp[wp.length-1];
+    svg += `<circle cx="${(tee.x*100).toFixed(1)}" cy="${(tee.y*100).toFixed(1)}" r="1.8" fill="#2e7d32" stroke="#fff" stroke-width="0.5"/>`;
+    if(wp.length>=2) svg += `<circle cx="${(pin.x*100).toFixed(1)}" cy="${(pin.y*100).toFixed(1)}" r="1.8" fill="#c62828" stroke="#fff" stroke-width="0.5"/>`;
+  }
+  // 클럽 도달 지점 (경로 따라) + HTML 라벨 (왜곡 방지)
+  let labels='';
+  const geom = computePathGeom(h.number);
+  const dist = parseInt(h.dist);
+  if(geom && dist>0){
+    labels += `<div style="position:absolute;left:${(wp[0].x*100)}%;top:${(wp[0].y*100)}%;transform:translate(-50%,-150%);background:#2e7d32;color:#fff;font-size:9px;padding:1px 4px;border-radius:3px;white-space:nowrap;">티</div>`;
+    const clubs = (current.plannedClubs[h.number]||[]).filter(c=>c && c!=='PT');
+    let cumM=0;
+    clubs.forEach(c=>{
+      cumM += (CLUB_DIST[c]||0);
+      const frac = Math.min(cumM/dist, 1);
+      const pt = pointAtFrac(geom, frac);
+      const rem = Math.max(Math.round(dist-cumM),0);
+      svg += `<circle cx="${(pt.x*100).toFixed(1)}" cy="${(pt.y*100).toFixed(1)}" r="1.4" fill="#ff9800" stroke="#fff" stroke-width="0.4"/>`;
+      labels += `<div style="position:absolute;left:${(pt.x*100)}%;top:${(pt.y*100)}%;transform:translate(-50%,-150%);background:rgba(0,0,0,0.7);color:#fff;font-size:9px;padding:1px 4px;border-radius:3px;white-space:nowrap;">${c}·남${rem}m</div>`;
+    });
+  }
+  return `
+    <div id="hmwrap_${h.number}" style="position:relative;margin-bottom:5px;">
+      <img src="${h.map}" id="hmimg_${h.number}" style="width:100%;border-radius:6px;display:block;${drawing?'cursor:crosshair;':''}" onclick="mapTap(event,${h.number})">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;">${svg}</svg>
+      <div style="position:absolute;inset:0;pointer-events:none;">${labels}</div>
+    </div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+      <button class="btn ${drawing?'btn-success':'btn-secondary'}" style="padding:5px 10px;font-size:0.78em;margin:0;" onclick="toggleDraw(${h.number})">${drawing?'✓ 그리는 중 — 탭하여 점 추가':'🖊️ 경로 그리기'}</button>
+      <button class="btn btn-secondary" style="padding:5px 10px;font-size:0.78em;margin:0;" onclick="undoPoint(${h.number})">↶ 취소</button>
+      <button class="btn btn-secondary" style="padding:5px 10px;font-size:0.78em;margin:0;" onclick="clearPath(${h.number})">초기화</button>
+      <span style="font-size:0.72em;color:#888;">${wp.length===0?'티→꺾임→핀 순서로 탭':wp.length+'점 (초록=티, 빨강=핀)'}</span>
+    </div>`;
+}
+function refreshHoleMap(holeNum){
+  const box = document.getElementById('hmbox_'+holeNum);
+  if(!box) return;
+  const h = current.course.holes.find(x=>Number(x.number)===Number(holeNum));
+  if(h) box.innerHTML = holeMapInner(h);
+}
+function mapTap(evt, holeNum){
+  if(drawModeHole!==holeNum) return;
+  const img = document.getElementById('hmimg_'+holeNum);
+  if(!img) return;
+  const rect = img.getBoundingClientRect();
+  const x=(evt.clientX-rect.left)/rect.width, y=(evt.clientY-rect.top)/rect.height;
+  if(x<0||x>1||y<0||y>1) return;
+  if(!Array.isArray(current.waypoints[holeNum])) current.waypoints[holeNum]=[];
+  current.waypoints[holeNum].push({x:+x.toFixed(4), y:+y.toFixed(4)});
+  refreshHoleMap(holeNum);
+  saveRoundSessionToDB();
+}
+function toggleDraw(holeNum){ drawModeHole = (drawModeHole===holeNum)?null:holeNum; refreshHoleMap(holeNum); }
+function undoPoint(holeNum){
+  if(Array.isArray(current.waypoints[holeNum]) && current.waypoints[holeNum].length){
+    current.waypoints[holeNum].pop(); refreshHoleMap(holeNum); saveRoundSessionToDB();
+  }
+}
+function clearPath(holeNum){
+  if(confirm('이 홀의 경로를 초기화할까요?')){
+    current.waypoints[holeNum]=[]; refreshHoleMap(holeNum); saveRoundSessionToDB();
+  }
+}
+
 function renderPrep(){
   // 이미 예상 클럽이 선택된 홀 중 퍼트거리가 비어있으면 자동 추정값 채우기
   let backfilled = false;
@@ -1092,7 +1196,7 @@ function renderPrep(){
     return `
     <div class="hole-card">
       <div class="hole-number">홀 ${h.number} (Par ${h.par}${h.dist?', '+h.dist+'m':''})</div>
-      ${h.map?`<img src="${h.map}" style="width:100%;border-radius:6px;margin-bottom:8px;">`:'<div style="background:#f0f0f0;color:#999;padding:20px;text-align:center;border-radius:6px;margin-bottom:8px;font-size:0.82em;">홀맵 없음 (코스 수정에서 등록)</div>'}
+      <div id="hmbox_${h.number}">${holeMapInner(h)}</div>
       ${strategy?`<div style="background:#e8f0ff;color:#1e3c72;padding:8px 10px;border-radius:6px;font-size:0.82em;margin-bottom:8px;"><b>🎯 추천 공략:</b><br>${strategy}</div>`:''}
       <div class="hole-input"><label>🎯 예상 클럽 (샷 순서대로 · 미스샷 분석 기준)</label><div class="club-grid">${plannedSelects}</div></div>
       <div class="hole-input"><label>⛳ 예상 퍼트거리(m · 클럽 선택 시 자동 추정, 수정 가능)</label><input type="text" id="putt_${h.number}" value="${current.plannedPutts[h.number]||''}" onchange="setPlannedPutt(${h.number}, this.value)" placeholder="자동 추정됨 (쉼표로 여러개 가능)"></div>
