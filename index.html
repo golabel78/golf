@@ -1061,6 +1061,17 @@ function suggestStrategy(holeDist, par){
 }
 
 function renderPrep(){
+  // 이미 예상 클럽이 선택된 홀 중 퍼트거리가 비어있으면 자동 추정값 채우기
+  let backfilled = false;
+  current.course.holes.forEach(h=>{
+    const hasClub = Array.isArray(current.plannedClubs[h.number]) && current.plannedClubs[h.number].some(x=>x);
+    const noPutt = !current.plannedPutts[h.number];
+    if(hasClub && noPutt){
+      const ep = estimatePutt(computeApproachDist(h.number));
+      if(ep!=null){ current.plannedPutts[h.number] = String(ep); backfilled = true; }
+    }
+  });
+  if(backfilled){ saveRoundSessionToDB(); }
   document.getElementById('prepGrid').innerHTML=current.course.holes.map(h=>{
     const strategy = suggestStrategy(h.dist, h.par);
     const planned = Array.isArray(current.plannedClubs[h.number]) ? current.plannedClubs[h.number] : ['','','','',''];
