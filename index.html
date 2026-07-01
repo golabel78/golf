@@ -529,7 +529,7 @@ const CLUBS = ['DR','3W','HY','5i','6i','7i','8i','9i','PW','48','52','56','PT']
 const SEED = [{"id":"1","name":"Solmoro CC","holes":[{"number":1,"par":4,"dist":""},{"number":2,"par":4,"dist":""},{"number":3,"par":3,"dist":""},{"number":4,"par":5,"dist":""},{"number":5,"par":4,"dist":""},{"number":6,"par":3,"dist":""},{"number":7,"par":4,"dist":""},{"number":8,"par":5,"dist":""},{"number":9,"par":4,"dist":""},{"number":10,"par":4,"dist":""},{"number":11,"par":4,"dist":""},{"number":12,"par":3,"dist":""},{"number":13,"par":5,"dist":""},{"number":14,"par":4,"dist":""},{"number":15,"par":3,"dist":""},{"number":16,"par":4,"dist":""},{"number":17,"par":5,"dist":""},{"number":18,"par":4,"dist":""}]},{"id":"2","name":"엘리시안 강촌cc 레이크코스","holes":[{"number":1,"par":4,"dist":"310"},{"number":2,"par":5,"dist":"402"},{"number":3,"par":3,"dist":"130"},{"number":4,"par":4,"dist":"255"},{"number":5,"par":4,"dist":"122"},{"number":6,"par":5,"dist":"390"},{"number":7,"par":3,"dist":"93"},{"number":8,"par":5,"dist":"415"},{"number":9,"par":4,"dist":"338"}]},{"id":"3","name":"엘리시안 제주cc 레이크 코스","holes":[{"number":1,"par":5,"dist":"408"},{"number":2,"par":4,"dist":"296"},{"number":3,"par":3,"dist":"127"},{"number":4,"par":4,"dist":"270"},{"number":5,"par":4,"dist":"305"},{"number":6,"par":3,"dist":"382"},{"number":7,"par":3,"dist":"97"},{"number":8,"par":4,"dist":"285"},{"number":9,"par":4,"dist":"300"}]},{"id":"4","name":"엘리시안 강촌cc 힐코스","holes":[{"number":1,"par":4,"dist":"235"},{"number":2,"par":5,"dist":"370"},{"number":3,"par":4,"dist":"270"},{"number":4,"par":3,"dist":"105"},{"number":5,"par":4,"dist":"285"},{"number":6,"par":4,"dist":"280"},{"number":7,"par":5,"dist":"375"},{"number":8,"par":3,"dist":"111"},{"number":9,"par":4,"dist":"301"}]},{"id":"5","name":"스카이 밸리cc 스카이코스","holes":[{"number":1,"par":4,"dist":"326"},{"number":2,"par":5,"dist":"461"},{"number":3,"par":4,"dist":"299"},{"number":4,"par":3,"dist":"128"},{"number":5,"par":5,"dist":"396"},{"number":6,"par":4,"dist":"289"},{"number":7,"par":3,"dist":"120"},{"number":8,"par":4,"dist":"373"},{"number":9,"par":4,"dist":"350"}]},{"id":"6","name":"스카이 밸리cc 밸리코스","holes":[{"number":1,"par":4,"dist":"303"},{"number":2,"par":5,"dist":"454"},{"number":3,"par":3,"dist":"141"},{"number":4,"par":4,"dist":"322"},{"number":5,"par":4,"dist":"356"},{"number":6,"par":4,"dist":"317"},{"number":7,"par":3,"dist":"109"},{"number":8,"par":5,"dist":"426"},{"number":9,"par":4,"dist":"329"}]},{"id":"7","name":"H1cc 레이크 코스","holes":[{"number":1,"par":4,"dist":"304"},{"number":2,"par":5,"dist":"396"},{"number":3,"par":3,"dist":"249"},{"number":4,"par":5,"dist":"287"},{"number":5,"par":4,"dist":"125"},{"number":6,"par":3,"dist":"246"},{"number":7,"par":4,"dist":"452"},{"number":8,"par":5,"dist":"94"},{"number":9,"par":4,"dist":"256"}]},{"id":"8","name":"H1cc 마운틴 코스","holes":[{"number":1,"par":4,"dist":"246"},{"number":2,"par":4,"dist":"252"},{"number":3,"par":4,"dist":"270"},{"number":4,"par":4,"dist":"242"},{"number":5,"par":3,"dist":"110"},{"number":6,"par":3,"dist":"306"},{"number":7,"par":4,"dist":"228"},{"number":8,"par":5,"dist":"107"},{"number":9,"par":4,"dist":"400"}]}];
 
 let courses = [];
-let current = { course:null, goals:{}, scores:{}, clubs:{}, notes:{}, actualClubs:{}, postNotes:{}, sessionId:null, date:null, weather:'', temp:'', front9:'', back9:'', greenspeed:'' };
+let current = { course:null, goals:{}, scores:{}, clubs:{}, notes:{}, actualClubs:{}, actualPutts:{}, actualApproaches:{}, postNotes:{}, sessionId:null, date:null, weather:'', temp:'', front9:'', back9:'', greenspeed:'' };
 let editingCourseId = null;
 let editMaps = {};
 let editUnit = 'm'; // 코스 거리 입력 단위 (저장은 항상 m로 변환)
@@ -777,6 +777,8 @@ async function saveRoundSessionToDB() {
     // planned_clubs는 별도 저장 (컬럼 미존재 시에도 메인 저장에 영향 없음)
     try { await sb.from('round_sessions').update({ planned_clubs: current.plannedClubs }).eq('id', current.sessionId); } catch(e) {}
     try { await sb.from('round_sessions').update({ planned_putts: current.plannedPutts }).eq('id', current.sessionId); } catch(e) {}
+    try { await sb.from('round_sessions').update({ actual_putts: current.actualPutts }).eq('id', current.sessionId); } catch(e) {}
+    try { await sb.from('round_sessions').update({ actual_approaches: current.actualApproaches }).eq('id', current.sessionId); } catch(e) {}
     return true;
   } catch(e) {
     console.error('저장 중 오류:', e);
@@ -817,6 +819,8 @@ async function startRound(id){
     postNotes: {},
     plannedClubs: {},
     plannedPutts: {},
+    actualPutts: {},
+    actualApproaches: {},
     status: 'in_progress',
     sessionId: 's_' + Date.now(),
     date: new Date().toISOString().split('T')[0],
@@ -834,6 +838,8 @@ async function startRound(id){
     current.clubs = existing.clubs || {};
     current.notes = existing.notes || {};
     current.actualClubs = existing.actual_clubs || {};
+    current.actualPutts = existing.actual_putts || {};
+    current.actualApproaches = existing.actual_approaches || {};
     current.postNotes = existing.post_notes || {};
     current.plannedClubs = existing.planned_clubs || {};
     current.plannedPutts = existing.planned_putts || {};
@@ -935,15 +941,16 @@ function updatePrepSummary(){
       <div style="font-size:0.82em;line-height:1.7;">${list}</div></div>`;
   }
 
-  // 4) 예상 퍼트
+  // 4) 예상 퍼트 (거리별 횟수 pill)
   if(puttCount>0 || puttDists.length){
-    let pd='';
+    let pills='';
     if(puttDists.length){
-      const sum=puttDists.reduce((s,x)=>s+x,0);
-      pd=` · 입력거리 ${puttDists.length}개 합 ${sum.toFixed(1)}m (${puttDists.map(x=>x+'m').join(', ')})`;
+      const dc={};
+      puttDists.forEach(x=>{ dc[x]=(dc[x]||0)+1; });
+      pills = Object.keys(dc).sort((a,b)=>Number(a)-Number(b)).map(d=>`<span style="display:inline-block;background:#2e7d32;color:#fff;padding:3px 9px;border-radius:12px;margin:2px;font-size:0.8em;">${d}m ×${dc[d]}</span>`).join('');
     }
     html += `<div style="background:#e8f5e9;padding:10px;border-radius:6px;margin-bottom:6px;">
-      <div style="font-weight:600;color:#2e7d32;font-size:0.85em;">⛳ 예상 퍼트: 총 ${puttCount}개${pd}</div></div>`;
+      <div style="font-weight:600;color:#2e7d32;font-size:0.85em;margin-bottom:6px;">⛳ 예상 퍼트: 총 ${puttCount}개${puttDists.length?` (거리 입력 ${puttDists.length}개)`:''}</div>${pills}</div>`;
   }
 
   el.innerHTML = html;
@@ -1133,14 +1140,52 @@ function holeInputCard(h){
       <option value="">${idx+1}번째</option>
       ${CLUBS.map(c=>`<option value="${c}" ${shots[idx]===c?'selected':''}>${c}</option>`).join('')}
     </select>`).join('');
+  // 실제 퍼트거리 드롭다운 (퍼트 개수만큼, m 단위)
+  const PUTT_DIST = ['0.5','1','1.5','2','2.5','3','4','5','6','7','8','10','12','15','20'];
+  const aputts = current.actualPutts[h.number] || [];
+  let puttSelects = '';
+  if(putts>0){
+    puttSelects = `<div class="hole-input"><label>⛳ 실제 퍼트거리 (m)</label><div class="club-grid">` +
+      Array.from({length:putts}).map((_,i)=>`
+        <select onchange="setActualPutt(${h.number},${i},this.value)">
+          <option value="">${i+1}퍼트</option>
+          ${PUTT_DIST.map(d=>`<option value="${d}" ${aputts[i]===d?'selected':''}>${d}m</option>`).join('')}
+        </select>`).join('') + `</div></div>`;
+  }
+  // 실제 어프로치 거리 드롭다운 (그린 도달 샷 수만큼, m 단위)
+  const APPR_DIST = ['20','30','40','50','60','70','80','90','100','110','120','130','140','150','160','180','200','220','250'];
+  const aappr = current.actualApproaches[h.number] || [];
+  let apprSelects = '';
+  if(onShots>0){
+    apprSelects = `<div class="hole-input"><label>🎯 실제 어프로치/샷 거리 (m)</label><div class="club-grid">` +
+      Array.from({length:onShots}).map((_,i)=>`
+        <select onchange="setActualApproach(${h.number},${i},this.value)">
+          <option value="">${i+1}샷</option>
+          ${APPR_DIST.map(d=>`<option value="${d}" ${aappr[i]===d?'selected':''}>${d}m</option>`).join('')}
+        </select>`).join('') + `</div></div>`;
+  }
   return `<div class="hole-card">
     <div class="hole-number">홀 ${h.number} (Par ${h.par})</div>
     ${h.map?`<img src="${h.map}" style="width:100%;border-radius:6px;margin-bottom:8px;">`:''}
     <div class="hole-input"><label>샷 순서대로 클럽 선택 (타수 자동 계산)</label><div class="club-grid">${clubSelects}</div></div>
     ${resultText?`<div style="background:#e8f5e9;color:#2e7d32;padding:6px 10px;border-radius:6px;font-weight:600;font-size:0.9em;text-align:center;margin-bottom:6px;">⛳ ${resultText}</div>`:''}
     ${scoreLabel?`<div style="background:#2a5298;color:#fff;padding:8px 10px;border-radius:6px;font-weight:700;font-size:1em;text-align:center;margin-bottom:8px;">${scoreLabel}</div>`:''}
+    ${apprSelects}
+    ${puttSelects}
     <div class="hole-input"><label>전략·메모</label><input type="text" value="${current.notes[h.number]||''}" onchange="setInputNote(${h.number}, this.value)" placeholder="샷·전략 코멘트"></div>
   </div>`;
+}
+
+async function setActualApproach(holeNum, idx, value){
+  if(!Array.isArray(current.actualApproaches[holeNum])) current.actualApproaches[holeNum] = [];
+  current.actualApproaches[holeNum][idx] = value;
+  await saveRoundSessionToDB();
+}
+
+async function setActualPutt(holeNum, idx, value){
+  if(!Array.isArray(current.actualPutts[holeNum])) current.actualPutts[holeNum] = [];
+  current.actualPutts[holeNum][idx] = value;
+  await saveRoundSessionToDB();
 }
 
 async function setClub(holeNum, idx, val){
@@ -1407,6 +1452,30 @@ function buildReportBody(){
     <div style="background:#eef3ff;padding:10px;border-radius:6px;text-align:center;"><div style="font-size:1.3em;font-weight:bold;color:#1e3c72;">${avgPutt}</div><div style="font-size:0.72em;color:#666;">홀당 평균 퍼트</div></div>
     <div style="background:#eef3ff;padding:10px;border-radius:6px;text-align:center;"><div style="font-size:1.3em;font-weight:bold;color:${three>0?'#e65100':'#1e3c72'};">${three}</div><div style="font-size:0.72em;color:#666;">3퍼트 홀</div></div></div>`;
   html+=`<div style="font-size:0.78em;color:#888;margin-bottom:6px;">총 퍼트 ${putts}회 · 클럽 기록 있는 ${holesWithData}홀 기준 (GIR=규정타 내 그린 도달)</div>`;
+
+  // 실제 어프로치/퍼트 거리 빈도 분석 (빈도순)
+  const freqPills = (obj, color) => {
+    const all = [];
+    hs.forEach(h=>{ const arr=obj[h.number]; if(Array.isArray(arr)) arr.forEach(v=>{ if(v!=='' && v!=null) all.push(String(v)); }); });
+    if(!all.length) return null;
+    const cnt={}; all.forEach(v=>{ cnt[v]=(cnt[v]||0)+1; });
+    const sorted = Object.entries(cnt).sort((a,b)=> b[1]-a[1] || Number(b[0])-Number(a[0]));
+    return { total: all.length, pills: sorted.map(([d,c])=>`<span style="display:inline-block;background:${color};color:#fff;padding:3px 9px;border-radius:12px;margin:2px;font-size:0.8em;">${d}m ×${c}</span>`).join('') };
+  };
+  const apprF = freqPills(current.actualApproaches, '#e65100');
+  const puttF = freqPills(current.actualPutts, '#2e7d32');
+  html+=`<h3 style="color:#1e3c72;margin:20px 0 6px;font-size:1.05em;">📏 실제 거리 분석 (빈도순 · 연습 우선순위)</h3>`;
+  if(apprF){
+    html+=`<div style="background:#fff8e1;padding:10px;border-radius:6px;margin-bottom:8px;">
+      <div style="font-weight:600;color:#e65100;font-size:0.85em;margin-bottom:6px;">🎯 실제 어프로치/샷 거리 (총 ${apprF.total}회)</div>${apprF.pills}</div>`;
+  }
+  if(puttF){
+    html+=`<div style="background:#e8f5e9;padding:10px;border-radius:6px;margin-bottom:8px;">
+      <div style="font-weight:600;color:#2e7d32;font-size:0.85em;margin-bottom:6px;">⛳ 실제 퍼트 거리 (총 ${puttF.total}회)</div>${puttF.pills}</div>`;
+  }
+  if(!apprF && !puttF){
+    html+=`<div style="background:#f5f5f5;color:#888;padding:10px;border-radius:6px;font-size:0.85em;margin-bottom:8px;">라운드 중 실제 어프로치/퍼트 거리를 입력하면 여기에 빈도순으로 표시됩니다.</div>`;
+  }
 
   // #4 같은 코스 히스토리
   html+=`<h3 style="color:#1e3c72;margin:20px 0 6px;font-size:1.05em;">📈 같은 코스 비교</h3>`;
