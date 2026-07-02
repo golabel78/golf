@@ -1325,14 +1325,21 @@ function holeInputCard(h){
           </select></div>`;
       }).join('') + `</div></div>`;
   }
-  // 추가 미스 사유 (전체 클럽 통합 · 여러 개 · 클럽 귀속 안됨 → 유형 집계에만 반영)
+  // 추가 미스 사유 (클럽 선택 → 그 클럽 사유 · 친 클럽 포함 전체 · 여러 개)
   const extras = current.extraReasons[h.number] || [];
-  let extraBlock = `<div class="hole-input"><label>➕ 추가 미스 사유 (친 클럽 외 · 전체)</label><div style="display:grid;gap:5px;">`;
-  extras.forEach((val,i)=>{
+  let extraBlock = `<div class="hole-input"><label>➕ 추가 미스 사유 (클럽 선택 → 사유)</label><div style="display:grid;gap:5px;">`;
+  extras.forEach((item,i)=>{
+    const club = (item&&item.club)||'';
+    const reason = (item&&item.reason)||'';
+    const opts = club ? missReasonsForClub(club) : [];
     extraBlock += `<div style="display:flex;align-items:center;gap:6px;">
-      <select style="flex:1;" onchange="setExtraReason(${h.number},${i},this.value)">
-        <option value="">미스 없음/선택</option>
-        ${ALL_REASONS.map(r=>`<option value="${r}" ${val===r?'selected':''}>${r}</option>`).join('')}
+      <select style="width:74px;" onchange="setExtraClub(${h.number},${i},this.value)">
+        <option value="">클럽</option>
+        ${CLUBS.map(c=>`<option value="${c}" ${club===c?'selected':''}>${c==='PT'?'퍼터':c}</option>`).join('')}
+      </select>
+      <select style="flex:1;" onchange="setExtraReason(${h.number},${i},this.value)" ${club?'':'disabled'}>
+        <option value="">${club?'미스 없음/선택':'클럽 먼저'}</option>
+        ${opts.map(r=>`<option value="${r}" ${reason===r?'selected':''}>${r}</option>`).join('')}
       </select>
       <button class="btn btn-secondary" style="margin:0;padding:4px 10px;font-size:0.78em;" onclick="removeExtraReason(${h.number},${i})">✕</button></div>`;
   });
@@ -1353,14 +1360,23 @@ function holeInputCard(h){
 
 const ALL_REASONS = ['쓰리퍼트','좌측','우측','지나감','모자람','OB','슬라이스','훅','해저드','뒤땅','탑핑','생크','경사지미스-발끝내리막','경사지미스-발끝오르막','경사지미스-왼발내리막','경사지미스-왼발오르막','페어웨이벙커 탑핑','페어웨이벙커 미스','탑핑(뱀샷)','뒷땅(거리짧음)','우측미스','왼쪽미스','어프로치 탑핑','어프로치 뒷땅','방향미스(오른쪽)','방향미스(왼쪽)'];
 
-async function setExtraReason(holeNum, idx, value){
+async function setExtraClub(holeNum, idx, club){
   if(!Array.isArray(current.extraReasons[holeNum])) current.extraReasons[holeNum]=[];
-  current.extraReasons[holeNum][idx]=value;
+  if(!current.extraReasons[holeNum][idx]) current.extraReasons[holeNum][idx]={club:'',reason:''};
+  current.extraReasons[holeNum][idx].club = club;
+  current.extraReasons[holeNum][idx].reason = ''; // 클럽 바뀌면 사유 초기화
+  await saveRoundSessionToDB();
+  renderInput();
+}
+async function setExtraReason(holeNum, idx, reason){
+  if(!Array.isArray(current.extraReasons[holeNum])) current.extraReasons[holeNum]=[];
+  if(!current.extraReasons[holeNum][idx]) current.extraReasons[holeNum][idx]={club:'',reason:''};
+  current.extraReasons[holeNum][idx].reason = reason;
   await saveRoundSessionToDB();
 }
 function addExtraReason(holeNum){
   if(!Array.isArray(current.extraReasons[holeNum])) current.extraReasons[holeNum]=[];
-  current.extraReasons[holeNum].push('');
+  current.extraReasons[holeNum].push({club:'',reason:''});
   renderInput();
 }
 async function removeExtraReason(holeNum, idx){
@@ -1564,6 +1580,11 @@ async function renderPractice(){
         if(Array.isArray(rs)){
           rs.forEach((r,i)=>{ if(!r) return; const club=cl[i]; if(!club) return; const key = club==='PT'?'PT':club; clubMiss[key]=(clubMiss[key]||0)+1; });
         }
+        // 추가 미스 사유(클럽 선택형) → 그 클럽 약점 합산
+        const ex = (s.extra_reasons||{})[h.number];
+        if(Array.isArray(ex)){
+          ex.forEach(item=>{ if(item&&item.reason&&item.club){ clubMiss[item.club]=(clubMiss[item.club]||0)+1; } });
+        }
       });
     });
   }catch(e){}
@@ -1746,11 +1767,19 @@ function buildReportBody(){
       if(cat){ reasonByCat[cat]=(reasonByCat[cat]||0)+1; }
     });
   });
-  // 추가 미스 사유(전체 통합) → 유형 집계에만 합산 (클럽 귀속 없음)
+  // 추가 미스 사유 (클럽 선택형) → 유형 집계 + 클럽별(clubMiss) 합산
   hs.forEach(h=>{
     const ex = current.extraReasons[h.number];
     if(!Array.isArray(ex)) return;
-    ex.forEach(r=>{ if(r) reasonCount[r]=(reasonCount[r]||0)+1; });
+    ex.forEach(item=>{
+      if(!item || !item.reason) return;
+      reasonCount[item.reason]=(reasonCount[item.reason]||0)+1;
+      if(item.club){
+        clubMiss[item.club]=(clubMiss[item.club]||0)+1;
+        const cat = missCatForClub(item.club);
+        if(cat) reasonByCat[cat]=(reasonByCat[cat]||0)+1;
+      }
+    });
   });
 
   let html='';
@@ -1929,18 +1958,4 @@ ${notes?`<h2 style="font-size:1.4em;color:#1e3a5f;margin-bottom:16px;padding-bot
 <div style="background:#f8f9fa;padding:18px;text-align:center;color:#999;font-size:0.85em;">⛳ 골프 라운드 기록 | ${date}</div></div>`;
 }
 
-function copyCode(){ navigator.clipboard.writeText(document.getElementById('codeOut').textContent).then(()=>{const m=document.getElementById('copyMsg');m.style.display='block';setTimeout(()=>m.style.display='none',3000);}); }
-
-function showSlopeTab(id, btn) {
-  document.querySelectorAll('.slope-section').forEach(s => s.classList.remove('active'));
-  document.querySelectorAll('.slope-tab').forEach(t => t.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
-  btn.classList.add('active');
-}
-
-function show(id){ document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); document.getElementById(id).classList.add('active'); window.scrollTo(0,0); }
-
-loadCourses();
-</script>
-</body>
-</html>
+function copyCode(){ navigator.clipboard.writeText(d
