@@ -536,7 +536,7 @@ function initSupabase() {
     return;
   }
   sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-  initSupabase();
+  loadCourses();
 }
 
 const CLUBS = ['DR','3W','HY','5i','6i','7i','8i','9i','PW','48','52','56','PT'];
@@ -1358,7 +1358,7 @@ function holeInputCard(h){
   </div>`;
 }
 
-const ALL_REASONS = ['쓰리퍼트','좌측','우측','지나감','모자람','OB','슬라이스','훅','해저드','뒤땅','탑핑','생크','경사지미스-발끝내리막','경사지미스-발끝오르막','경사지미스-왼발내리막','경사지미스-왼발오르막','페어웨이벙커 탑핑','페어웨이벙커 미스','탑핑(뱀샷)','뒷땅(거리짧음)','우측미스','왼쪽미스','어프로치 탑핑','어프로치 뒷땅','방향미스(오른쪽)','방향미스(왼쪽)'];
+const ALL_REASONS_UNUSED = null; // (추가사유가 클럽별로 바뀌어 미사용)
 
 async function setExtraClub(holeNum, idx, club){
   if(!Array.isArray(current.extraReasons[holeNum])) current.extraReasons[holeNum]=[];
@@ -1958,4 +1958,6 @@ ${notes?`<h2 style="font-size:1.4em;color:#1e3a5f;margin-bottom:16px;padding-bot
 <div style="background:#f8f9fa;padding:18px;text-align:center;color:#999;font-size:0.85em;">⛳ 골프 라운드 기록 | ${date}</div></div>`;
 }
 
-function copyCode(){ navigator.clipboard.writeText(d
+function copyCode(){ navigator.clipboard.writeText(document.getElementById('codeOut').textContent).then(()=>{const m=document.getElementById('copyMsg');m.style.display='block';setTimeout(()=>m.style.display='none',3000);}); }
+
+function showSl
