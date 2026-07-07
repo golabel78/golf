@@ -193,10 +193,10 @@ body { font-family:'Noto Sans KR',-apple-system,sans-serif; background:linear-gr
     <h2 class="section-title">📝 라운드 후: 상세 기록</h2>
     <div id="postGrid"></div>
     <h2 class="section-title" style="margin-top:24px;">📸 미디어</h2>
-    <div class="input-field"><label>🎬 라운드 영상 (유튜브 링크)</label><input type="text" id="m_video" placeholder="https://youtube.com/watch?v=..."></div>
-    <div class="input-field"><label>📸 사진 URL (한 줄에 하나씩)</label><textarea id="m_photos" rows="4" placeholder="https://.../photo1.jpg"></textarea></div>
+    <div class="input-field"><label>🎬 라운드 영상 (유튜브 링크)</label><input type="text" id="m_video" onchange="setMedia('video',this.value)" placeholder="https://youtube.com/watch?v=..."></div>
+    <div class="input-field"><label>📸 사진 URL (한 줄에 하나씩)</label><textarea id="m_photos" rows="4" onchange="setMedia('photos',this.value)" placeholder="https://.../photo1.jpg"></textarea></div>
     <h2 class="section-title" style="margin-top:24px;">💭 회고</h2>
-    <div class="input-field"><textarea id="m_notes" rows="5" placeholder="라운드 회고, 느낀 점, 다음 목표..."></textarea></div>
+    <div class="input-field"><textarea id="m_notes" rows="5" onchange="setMedia('retro',this.value)" placeholder="라운드 회고, 느낀 점, 다음 목표..."></textarea></div>
     <div class="button-group"><button class="btn btn-primary" onclick="renderReport();show('reportView');">📊 분석 리포트</button><button class="btn btn-success" onclick="goExport()">✓ 블로그 포스트 생성</button></div>
   </div>
 </div>
@@ -232,6 +232,7 @@ body { font-family:'Noto Sans KR',-apple-system,sans-serif; background:linear-gr
     <div id="reportBody"></div>
     <div class="button-group" style="margin-top:18px;">
       <button class="btn btn-success" id="reportFinalizeBtn" onclick="finalizeRound()">🏁 라운드 완료 (기록 저장)</button>
+      <button class="btn btn-primary" onclick="goExport()">📝 블로그 포스트 생성</button>
       <button class="btn btn-secondary" onclick="show('dashboardView')">대시보드</button>
     </div>
   </div>
@@ -239,7 +240,7 @@ body { font-family:'Noto Sans KR',-apple-system,sans-serif; background:linear-gr
 
 <!-- 내보내기 -->
 <div id="exportView" class="view">
-  <span class="back-btn" onclick="show('postView')">← 라운드 후 기록</span>
+  <span class="back-btn" id="exportBack" onclick="show('postView')">← 라운드 후 기록</span>
   <div class="card">
     <h2 class="section-title">📱 블로그 포스트 완성</h2>
     <div class="success-msg">✅ 아래 코드 복사 → 네이버 블로그/티스토리 → 새글 → HTML 편집 → 붙여넣기 → 발행</div>
@@ -554,7 +555,7 @@ const CLUBS = ['DR','3W','HY','5i','6i','7i','8i','9i','PW','48','52','56','PT']
 const SEED = [{"id":"1","name":"Solmoro CC","holes":[{"number":1,"par":4,"dist":""},{"number":2,"par":4,"dist":""},{"number":3,"par":3,"dist":""},{"number":4,"par":5,"dist":""},{"number":5,"par":4,"dist":""},{"number":6,"par":3,"dist":""},{"number":7,"par":4,"dist":""},{"number":8,"par":5,"dist":""},{"number":9,"par":4,"dist":""},{"number":10,"par":4,"dist":""},{"number":11,"par":4,"dist":""},{"number":12,"par":3,"dist":""},{"number":13,"par":5,"dist":""},{"number":14,"par":4,"dist":""},{"number":15,"par":3,"dist":""},{"number":16,"par":4,"dist":""},{"number":17,"par":5,"dist":""},{"number":18,"par":4,"dist":""}]},{"id":"2","name":"엘리시안 강촌cc 레이크코스","holes":[{"number":1,"par":4,"dist":"310"},{"number":2,"par":5,"dist":"402"},{"number":3,"par":3,"dist":"130"},{"number":4,"par":4,"dist":"255"},{"number":5,"par":4,"dist":"122"},{"number":6,"par":5,"dist":"390"},{"number":7,"par":3,"dist":"93"},{"number":8,"par":5,"dist":"415"},{"number":9,"par":4,"dist":"338"}]},{"id":"3","name":"엘리시안 제주cc 레이크 코스","holes":[{"number":1,"par":5,"dist":"408"},{"number":2,"par":4,"dist":"296"},{"number":3,"par":3,"dist":"127"},{"number":4,"par":4,"dist":"270"},{"number":5,"par":4,"dist":"305"},{"number":6,"par":3,"dist":"382"},{"number":7,"par":3,"dist":"97"},{"number":8,"par":4,"dist":"285"},{"number":9,"par":4,"dist":"300"}]},{"id":"4","name":"엘리시안 강촌cc 힐코스","holes":[{"number":1,"par":4,"dist":"235"},{"number":2,"par":5,"dist":"370"},{"number":3,"par":4,"dist":"270"},{"number":4,"par":3,"dist":"105"},{"number":5,"par":4,"dist":"285"},{"number":6,"par":4,"dist":"280"},{"number":7,"par":5,"dist":"375"},{"number":8,"par":3,"dist":"111"},{"number":9,"par":4,"dist":"301"}]},{"id":"5","name":"스카이 밸리cc 스카이코스","holes":[{"number":1,"par":4,"dist":"326"},{"number":2,"par":5,"dist":"461"},{"number":3,"par":4,"dist":"299"},{"number":4,"par":3,"dist":"128"},{"number":5,"par":5,"dist":"396"},{"number":6,"par":4,"dist":"289"},{"number":7,"par":3,"dist":"120"},{"number":8,"par":4,"dist":"373"},{"number":9,"par":4,"dist":"350"}]},{"id":"6","name":"스카이 밸리cc 밸리코스","holes":[{"number":1,"par":4,"dist":"303"},{"number":2,"par":5,"dist":"454"},{"number":3,"par":3,"dist":"141"},{"number":4,"par":4,"dist":"322"},{"number":5,"par":4,"dist":"356"},{"number":6,"par":4,"dist":"317"},{"number":7,"par":3,"dist":"109"},{"number":8,"par":5,"dist":"426"},{"number":9,"par":4,"dist":"329"}]},{"id":"7","name":"H1cc 레이크 코스","holes":[{"number":1,"par":4,"dist":"304"},{"number":2,"par":5,"dist":"396"},{"number":3,"par":3,"dist":"249"},{"number":4,"par":5,"dist":"287"},{"number":5,"par":4,"dist":"125"},{"number":6,"par":3,"dist":"246"},{"number":7,"par":4,"dist":"452"},{"number":8,"par":5,"dist":"94"},{"number":9,"par":4,"dist":"256"}]},{"id":"8","name":"H1cc 마운틴 코스","holes":[{"number":1,"par":4,"dist":"246"},{"number":2,"par":4,"dist":"252"},{"number":3,"par":4,"dist":"270"},{"number":4,"par":4,"dist":"242"},{"number":5,"par":3,"dist":"110"},{"number":6,"par":3,"dist":"306"},{"number":7,"par":4,"dist":"228"},{"number":8,"par":5,"dist":"107"},{"number":9,"par":4,"dist":"400"}]}];
 
 let courses = [];
-let current = { course:null, goals:{}, scores:{}, clubs:{}, notes:{}, missReasons:{}, extraReasons:{}, actualClubs:{}, actualPutts:{}, actualApproaches:{}, waypoints:{}, actualWaypoints:{}, practice:{dates:[],done:{},mode:'cycle'}, postNotes:{}, sessionId:null, date:null, weather:'', temp:'', front9:'', back9:'', greenspeed:'' };
+let current = { course:null, goals:{}, scores:{}, clubs:{}, notes:{}, missReasons:{}, extraReasons:{}, actualClubs:{}, actualPutts:{}, actualApproaches:{}, waypoints:{}, actualWaypoints:{}, practice:{dates:[],done:{},mode:'cycle'}, media:{retro:'',video:'',photos:''}, postNotes:{}, sessionId:null, date:null, weather:'', temp:'', front9:'', back9:'', greenspeed:'' };
 let drawModeHole = null; // 홀맵 경로 그리기 모드 (홀번호 또는 null)
 let drawModeHoleActual = null; // 라운드중 실제 경로 그리기 모드
 let editingCourseId = null;
@@ -811,6 +812,7 @@ async function saveRoundSessionToDB() {
     try { await sb.from('round_sessions').update({ waypoints: current.waypoints }).eq('id', current.sessionId); } catch(e) {}
     try { await sb.from('round_sessions').update({ actual_waypoints: current.actualWaypoints }).eq('id', current.sessionId); } catch(e) {}
     try { await sb.from('round_sessions').update({ practice: current.practice }).eq('id', current.sessionId); } catch(e) {}
+    try { await sb.from('round_sessions').update({ media: current.media }).eq('id', current.sessionId); } catch(e) {}
     try { await sb.from('round_sessions').update({ miss_reasons: current.missReasons }).eq('id', current.sessionId); } catch(e) {}
     try { await sb.from('round_sessions').update({ extra_reasons: current.extraReasons }).eq('id', current.sessionId); } catch(e) {}
     return true;
@@ -860,6 +862,7 @@ async function startRound(id){
     waypoints: {},
     actualWaypoints: {},
     practice: {dates:[],done:{},mode:'cycle'},
+    media: {retro:'',video:'',photos:''},
     status: 'in_progress',
     sessionId: 's_' + Date.now(),
     date: new Date().toISOString().split('T')[0],
@@ -884,6 +887,7 @@ async function startRound(id){
     current.waypoints = existing.waypoints || {};
     current.actualWaypoints = existing.actual_waypoints || {};
     current.practice = existing.practice || {dates:[],done:{},mode:'cycle'};
+    current.media = existing.media || {retro:'',video:'',photos:''};
     if(!current.practice.mode) current.practice.mode='cycle';
     if(!current.practice.dates) current.practice.dates=[];
     if(!current.practice.done) current.practice.done={};
@@ -1582,7 +1586,17 @@ function renderInput(){
 async function goPost(){
   await saveRoundSessionToDB();
   renderPost();
+  // 미디어 입력칸 프리필 (저장된 값 복원)
+  const m = current.media||{};
+  const vEl=document.getElementById('m_video'); if(vEl) vEl.value=m.video||'';
+  const pEl=document.getElementById('m_photos'); if(pEl) pEl.value=m.photos||'';
+  const nEl=document.getElementById('m_notes'); if(nEl) nEl.value=m.retro||'';
   show('postView');
+}
+async function setMedia(field, value){
+  if(!current.media) current.media={retro:'',video:'',photos:''};
+  current.media[field]=value;
+  await saveRoundSessionToDB();
 }
 
 async function beforeGoInput() {
@@ -2071,18 +2085,20 @@ function buildReportBody(){
   document.getElementById('reportBody').innerHTML=html;
 }
 
-function goExport(){ document.getElementById('codeOut').textContent=buildBlogHTML(); show('exportView'); }
+function goExport(){ document.getElementById('codeOut').textContent=buildBlogHTML(); const b=document.getElementById('exportBack'); if(b){ const ro=!!current.readOnly; b.textContent=ro?'← 분석 리포트':'← 라운드 후 기록'; b.setAttribute('onclick', ro?"show('reportView')":"show('postView')"); } show('exportView'); }
 
 function buildBlogHTML(){
-  const name=document.getElementById('r_courseName').value;
-  const date=document.getElementById('r_date').value;
-  const weather=document.getElementById('r_weather').value;
-  const temp=document.getElementById('r_temp').value;
+  const dv=(id)=>{const el=document.getElementById(id);return el?el.value:'';};
+  const name=current.course?current.course.name:dv('r_courseName');
+  const date=current.date||dv('r_date');
+  const weather=current.weather||dv('r_weather');
+  const temp=current.temp||dv('r_temp');
   const front9=current.front9||''; const back9=current.back9||'';
-  const gs=document.getElementById('r_greenspeed').value;
-  const notes=document.getElementById('m_notes').value;
-  const video=document.getElementById('m_video').value;
-  const photos=document.getElementById('m_photos').value.split('\n').filter(u=>u.trim());
+  const gs=current.greenspeed||dv('r_greenspeed');
+  const m=current.media||{};
+  const notes=m.retro||dv('m_notes');
+  const video=m.video||dv('m_video');
+  const photos=(m.photos||dv('m_photos')).split('\n').filter(u=>u.trim());
   let vid='';
   if(video){ let id=video.includes('watch?v=')?video.split('watch?v=')[1].split('&')[0]:(video.includes('youtu.be/')?video.split('youtu.be/')[1].split('?')[0]:video); vid=`<div style="position:relative;width:100%;padding-bottom:56.25%;margin-bottom:24px;background:#000;border-radius:8px;overflow:hidden;"><iframe src="https://www.youtube.com/embed/${id}" style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;" allowfullscreen></iframe></div>`; }
   let gal=''; if(photos.length){ gal=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:24px;">${photos.map(u=>`<img src="${u.trim()}" style="width:100%;border-radius:8px;">`).join('')}</div>`; }
