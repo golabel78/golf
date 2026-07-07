@@ -216,13 +216,22 @@ body { font-family:'Noto Sans KR',-apple-system,sans-serif; background:linear-gr
 </div>
 
 <!-- 분석 리포트 -->
+<div id="historyView" class="view">
+  <span class="back-btn" onclick="show('dashboardView')">← 대시보드</span>
+  <div class="card">
+    <h2 class="section-title" id="historyTitle">📁 지난 기록</h2>
+    <div id="historyBody"></div>
+  </div>
+</div>
+
 <div id="reportView" class="view">
-  <span class="back-btn" onclick="show('postView')">← 라운드 후 기록</span>
+  <span class="back-btn" id="reportBack" onclick="show('postView')">← 라운드 후 기록</span>
   <div class="card">
     <h2 class="section-title">📊 라운드 분석 리포트</h2>
+    <div id="reportReadonlyBadge" style="display:none;background:#eef3ff;color:#1e3c72;padding:8px 12px;border-radius:6px;margin-bottom:12px;font-size:0.85em;font-weight:600;">👁️ 읽기 전용 · 지난 기록 (편집·저장 안 됨)</div>
     <div id="reportBody"></div>
     <div class="button-group" style="margin-top:18px;">
-      <button class="btn btn-success" onclick="finalizeRound()">🏁 라운드 완료 (기록 저장)</button>
+      <button class="btn btn-success" id="reportFinalizeBtn" onclick="finalizeRound()">🏁 라운드 완료 (기록 저장)</button>
       <button class="btn btn-secondary" onclick="show('dashboardView')">대시보드</button>
     </div>
   </div>
@@ -640,6 +649,7 @@ function renderDashboard() {
       <p>${c.holes.length}홀 · Par ${c.holes.reduce((s,h)=>s+Number(h.par||0),0)}</p>
       <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
         <button class="btn btn-secondary" style="padding:6px 12px; font-size:0.85em;" onclick="editCourse('${c.id}')">✏️ 수정</button>
+        <button class="btn btn-secondary" style="padding:6px 12px; font-size:0.85em;" onclick="openHistory('${c.id}')">📁 지난 기록</button>
         <button class="btn btn-danger" style="padding:6px 12px; font-size:0.85em;" onclick="deleteCourse('${c.id}')">🗑️ 삭제</button>
         <button class="btn btn-primary" style="padding:6px 12px; font-size:0.85em;" onclick="startRound('${c.id}')">▶️ 라운드</button>
       </div>
@@ -765,6 +775,7 @@ async function saveCourse() {
 }
 
 async function saveRoundSessionToDB() {
+  if (current.readOnly) return true; // 읽기전용(지난 기록 열람) → 저장 차단, 원본 보호
   if (!current.sessionId || !current.course) return;
   
   const sessionData = {
@@ -1044,6 +1055,7 @@ async function setPlannedClub(holeNum, idx, val){
 }
 
 async function finalizeRound(){
+  if(current.readOnly){ alert('읽기 전용 기록입니다. 편집·완료할 수 없습니다.'); return; }
   if(!confirm('이 라운드를 완료 처리할까요?\n완료하면 기록으로 저장되고, 다음에 같은 코스를 시작하면 새 라운드로 시작됩니다.')) return;
   await saveRoundSessionToDB();
   current.status = 'completed';
@@ -1774,11 +1786,55 @@ async function loadCompletedSessions(courseId, excludeId){
 }
 
 let _reportHistory = [];
+let historyList = [];
+async function openHistory(courseId){
+  const c = courses.find(x=>x.id===courseId);
+  if(!c) return;
+  document.getElementById('historyTitle').textContent = '📁 '+c.name+' · 지난 기록';
+  const body = document.getElementById('historyBody');
+  body.innerHTML = '<div style="padding:16px;text-align:center;color:#999;">불러오는 중...</div>';
+  show('historyView');
+  historyList = await loadCompletedSessions(courseId, null);
+  if(!historyList.length){ body.innerHTML='<div style="background:#f5f5f5;color:#888;padding:12px;border-radius:6px;">완료된 지난 라운드가 없습니다.</div>'; return; }
+  body.innerHTML = historyList.map((s,i)=>{
+    const sc=s.scores||{}; let tot=0,par=0,n=0;
+    c.holes.forEach(h=>{ const v=Number(sc[h.number]); if(v){tot+=v; par+=Number(h.par)||0; n++;} });
+    const diff=tot-par;
+    return `<div class="course-card" style="cursor:pointer;" onclick="viewPastRound(${i})">
+      <h3>${s.round_date||'날짜미상'}</h3>
+      <p>${n>0?`총 ${tot}타 (${diff>0?'+':''}${diff}) · ${n}홀 기록`:'스코어 미기록'}</p>
+      <div style="font-size:0.8em;color:#2a5298;font-weight:600;">탭 → 분석 리포트 보기</div>
+    </div>`;
+  }).join('');
+}
+function viewPastRound(idx){
+  const s = historyList[idx];
+  const c = courses.find(x=>x.id===s.course_id);
+  if(!c){ alert('코스를 찾을 수 없습니다'); return; }
+  current = {
+    course:c, goals:s.goals||{}, scores:s.scores||{}, clubs:s.clubs||{}, notes:s.notes||{},
+    missReasons:s.miss_reasons||{}, extraReasons:s.extra_reasons||{},
+    actualClubs:s.actual_clubs||{}, actualPutts:s.actual_putts||{}, actualApproaches:s.actual_approaches||{},
+    waypoints:s.waypoints||{}, actualWaypoints:s.actual_waypoints||{},
+    plannedClubs:s.planned_clubs||{}, plannedPutts:s.planned_putts||{},
+    practice:s.practice||{dates:[],done:{},mode:'cycle'}, postNotes:s.post_notes||{},
+    sessionId:s.id, date:s.round_date, weather:s.weather||'', temp:s.temp||'',
+    front9:s.front9||'', back9:s.back9||'', greenspeed:s.greenspeed||'', readOnly:true
+  };
+  renderReport();
+  show('reportView');
+}
 async function renderReport(){
+  // 읽기전용/일반 UI 토글
+  const ro = !!current.readOnly;
+  const badge=document.getElementById('reportReadonlyBadge'); if(badge) badge.style.display = ro?'block':'none';
+  const fin=document.getElementById('reportFinalizeBtn'); if(fin) fin.style.display = ro?'none':'inline-block';
+  const back=document.getElementById('reportBack'); if(back){ back.textContent = ro?'← 지난 기록':'← 라운드 후 기록'; back.setAttribute('onclick', ro?"show('historyView')":"show('postView')"); }
   document.getElementById('reportBody').innerHTML = '<div style="padding:20px;text-align:center;color:#999;">분석 중...</div>';
   _reportHistory = await loadCompletedSessions(current.course.id, current.sessionId);
   buildReportBody();
 }
+async function _renderReport_OLD(){ /* deprecated */ }
 
 function buildReportBody(){
   const hs = current.course.holes;
