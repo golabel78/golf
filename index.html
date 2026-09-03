@@ -208,7 +208,7 @@ const SEED = [{"id":"1","name":"Solmoro CC","holes":[{"number":1,"par":4,"dist":
 
 let courses = [];
 let roundRecords = [];
-let current = { course:null, goals:{}, scores:{}, clubs:{}, notes:{}, actualClubs:{}, postNotes:{} };
+let current = { course:null, goals:{}, scores:{}, clubs:{}, notes:{}, actualClubs:{}, postNotes:{}, planClubs:{} };
 let editingCourseId = null;
 let editMaps = {};
 
@@ -408,7 +408,7 @@ async function saveCourse() {
 
 function startRound(id){
   const c=courses.find(x=>x.id===id); if(!c)return;
-  current={course:c, goals:{}, scores:{}, clubs:{}, notes:{}, actualClubs:{}, postNotes:{}};
+  current={course:c, goals:{}, scores:{}, clubs:{}, notes:{}, actualClubs:{}, postNotes:{}, planClubs:{}};
   document.getElementById('r_courseName').value=c.name;
   document.getElementById('r_date').valueAsDate=new Date();
   document.getElementById('r_front9').value=''; document.getElementById('r_back9').value=''; document.getElementById('r_greenspeed').value='';
@@ -462,14 +462,38 @@ function suggestStrategy(holeDist, par){
 function renderPrep(){
   document.getElementById('prepGrid').innerHTML=current.course.holes.map(h=>{
     const strategy = suggestStrategy(h.dist, h.par);
+    // 계획 클럽 (저장된 값 or 빈 배열)
+    let plan = current.planClubs[h.number] || [];
+    if (!Array.isArray(plan)) plan = [];
+    const filled = plan.filter(s=>s).length;
+    const showCount = Math.max(3, filled + 1);
+    let planSelects = '';
+    for (let idx=0; idx<showCount; idx++){
+      planSelects += `
+      <select onchange="setPlanClub(${h.number},${idx},this.value)" style="margin-bottom:4px;">
+        <option value="">${idx+1}번째 계획 샷</option>
+        ${CLUBS.map(c=>`<option value="${c}" ${plan[idx]===c?'selected':''}>${c==='PT'?'PT(퍼터)':c}</option>`).join('')}
+      </select>`;
+    }
+    const planText = plan.filter(s=>s).join(' → ');
     return `
     <div class="hole-card">
       <div class="hole-number">홀 ${h.number} (Par ${h.par}${h.dist?', '+h.dist+'m':''})</div>
       ${h.map?`<img src="${h.map}" style="width:100%;border-radius:6px;margin-bottom:8px;">`:'<div style="background:#f0f0f0;color:#999;padding:20px;text-align:center;border-radius:6px;margin-bottom:8px;font-size:0.82em;">홀맵 없음 (코스 수정에서 등록)</div>'}
       ${strategy?`<div style="background:#e8f0ff;color:#1e3c72;padding:8px 10px;border-radius:6px;font-size:0.82em;margin-bottom:8px;"><b>🎯 추천 공략:</b><br>${strategy}</div>`:''}
-      <div class="hole-input"><label>📝 나의 목표 (시뮬레이션 후)</label><textarea onchange="current.goals[${h.number}]=this.value" style="min-height:55px;" placeholder="추천을 참고해 나만의 목표·전략 작성">${current.goals[h.number]||''}</textarea></div>
+      <div class="hole-input"><label>🏌️ 나의 계획 클럽 (드롭다운, 칸 자동 추가)</label>${planSelects}</div>
+      ${planText?`<div style="background:#fff3cd;color:#856404;padding:6px 10px;border-radius:6px;font-size:0.85em;font-weight:600;text-align:center;margin-bottom:8px;">📋 내 계획: ${planText}</div>`:''}
+      <div class="hole-input"><label>📝 메모 (선택)</label><textarea onchange="current.goals[${h.number}]=this.value" style="min-height:45px;" placeholder="추가 전략·메모">${current.goals[h.number]||''}</textarea></div>
     </div>`;
   }).join('');
+}
+function setPlanClub(holeNum, idx, val){
+  if (!Array.isArray(current.planClubs[holeNum])) current.planClubs[holeNum] = [];
+  current.planClubs[holeNum][idx] = val;
+  while (current.planClubs[holeNum].length && !current.planClubs[holeNum][current.planClubs[holeNum].length-1]) {
+    current.planClubs[holeNum].pop();
+  }
+  renderPrep();
 }
 function goInput(){ current.front9=document.getElementById('r_front9').value; current.back9=document.getElementById('r_back9').value; renderInput(); show('inputView'); }
 function holeInputCard(h){
@@ -503,14 +527,16 @@ function holeInputCard(h){
       ${CLUBS.map(c=>`<option value="${c}" ${shots[idx]===c?'selected':''}>${c==='PT'?'PT(퍼터)':c}</option>`).join('')}
     </select>`;
   }
-  // 라운드 전 계획(추천 공략) + 거리 표시
+  // 라운드 전 계획(내가 고른 클럽) + 추천 공략 + 거리 표시
   const strategy = suggestStrategy(h.dist, h.par);
   const distInfo = h.dist ? `거리 ${h.dist}m` : '';
-  const planBox = (strategy || distInfo) ? `
+  const myPlan = Array.isArray(current.planClubs[h.number]) ? current.planClubs[h.number].filter(s=>s).join(' → ') : '';
+  const planBox = (strategy || distInfo || myPlan) ? `
     <div style="background:#eef3ff;border-left:3px solid #2a5298;padding:8px 10px;border-radius:6px;font-size:0.8em;margin-bottom:8px;color:#1e3c72;">
       ${distInfo?`<div>📏 ${distInfo}</div>`:''}
-      ${strategy?`<div style="margin-top:3px;"><b>🎯 라운드 전 계획:</b> ${strategy}</div>`:''}
-      ${current.goals[h.number]?`<div style="margin-top:3px;">📝 목표: ${current.goals[h.number]}</div>`:''}
+      ${myPlan?`<div style="margin-top:3px;"><b>📋 내 계획:</b> ${myPlan}</div>`:''}
+      ${strategy?`<div style="margin-top:3px;"><b>🎯 추천:</b> ${strategy}</div>`:''}
+      ${current.goals[h.number]?`<div style="margin-top:3px;">📝 ${current.goals[h.number]}</div>`:''}
     </div>` : '';
   return `<div class="hole-card">
     <div class="hole-number">홀 ${h.number} (Par ${h.par}${h.dist?', '+h.dist+'m':''})</div>
