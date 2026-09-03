@@ -88,6 +88,11 @@ body { font-family:'Noto Sans KR',-apple-system,sans-serif; background:linear-gr
     <div id="courseList"></div>
     <div class="button-group"><button class="btn btn-primary" onclick="openAddCourse()">+ 새 코스 추가</button></div>
   </div>
+  <div class="card">
+    <h2 class="section-title">⛰️ 경사지 공략 가이드</h2>
+    <p style="color:#666; font-size:0.9em; margin-bottom:14px;">페어웨이·어프로치에서 만나는 4가지 경사지 상황별 공략법이에요. 탭하면 펼쳐집니다.</p>
+    <div id="slopeGuide"></div>
+  </div>
 </div>
 
 <!-- 코스 추가/수정 -->
@@ -195,7 +200,7 @@ function initSupabase() {
     return;
   }
   sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-  initSupabase();
+  loadCourses();
 }
 
 const CLUBS = ['DR','3W','HY','5i','6i','7i','8i','9i','PW','52','56','PT'];
@@ -654,7 +659,76 @@ ${notes?`<h2 style="font-size:1.4em;color:#1e3a5f;margin-bottom:16px;padding-bot
 function copyCode(){ navigator.clipboard.writeText(document.getElementById('codeOut').textContent).then(()=>{const m=document.getElementById('copyMsg');m.style.display='block';setTimeout(()=>m.style.display='none',3000);}); }
 function show(id){ document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); document.getElementById(id).classList.add('active'); window.scrollTo(0,0); }
 
-loadCourses();
+// 경사지 공략 가이드
+const SLOPE_GUIDE = [
+  {
+    icon:'⬆️', title:'오르막 라이 (공이 발보다 높음)',
+    color:'#2e7d32',
+    tips:[
+      '공이 발보다 위에 있어 훅(왼쪽으로 감)이 나기 쉬움 → 목표보다 오른쪽 겨냥',
+      '경사만큼 그립을 짧게 잡고 스윙을 컴팩트하게',
+      '볼이 몸쪽에 가까우니 평소보다 한 클럽 짧게(작게) 선택',
+      '체중은 경사 반대(앞발)로, 균형 유지가 최우선'
+    ]
+  },
+  {
+    icon:'⬇️', title:'내리막 라이 (공이 발보다 낮음)',
+    color:'#c62828',
+    tips:[
+      '슬라이스(오른쪽으로 감)가 나기 쉬움 → 목표보다 왼쪽 겨냥',
+      '무릎을 더 굽혀 공에 가까이, 스윙 내내 자세 유지',
+      '거리가 줄기 쉬우니 한 클럽 길게(크게) 선택',
+      '끝까지 공을 보고, 몸이 일어나지 않게 주의'
+    ]
+  },
+  {
+    icon:'📈', title:'오르막 경사 (그린이 높은 곳)',
+    color:'#1565c0',
+    tips:[
+      '볼이 높이 뜨고 거리가 짧아짐 → 한두 클럽 길게 선택',
+      '경사를 따라 체중을 오르막 쪽(뒷발)에 조금 더',
+      '평소보다 큰 스윙보다 정확한 임팩트에 집중',
+      '핀까지 실제 거리 + 높이 보정(대략 높이 10m당 +10m)'
+    ]
+  },
+  {
+    icon:'📉', title:'내리막 경사 (그린이 낮은 곳)',
+    color:'#6a1b9a',
+    tips:[
+      '볼이 낮게 날고 거리가 늘어남 → 한 클럽 짧게 선택',
+      '체중을 내리막 쪽(앞발)에 두고 경사를 따라 스윙',
+      '띄우려 하지 말고 경사면을 쓸어 치듯이',
+      '착지 후 많이 구르니 그린 앞쪽을 노리기'
+    ]
+  }
+];
+
+function renderSlopeGuide(){
+  const el = document.getElementById('slopeGuide');
+  if (!el) return;
+  el.innerHTML = SLOPE_GUIDE.map((s,i)=>`
+    <div style="border:2px solid #e0e0e0;border-radius:8px;margin-bottom:10px;overflow:hidden;">
+      <div onclick="toggleSlope(${i})" style="padding:14px;cursor:pointer;background:#f8fbff;display:flex;align-items:center;gap:10px;font-weight:600;color:${s.color};">
+        <span style="font-size:1.3em;">${s.icon}</span>
+        <span style="flex:1;">${s.title}</span>
+        <span id="slope_arrow_${i}" style="color:#999;">▼</span>
+      </div>
+      <div id="slope_body_${i}" style="display:none;padding:14px;background:#fff;">
+        <ul style="margin:0;padding-left:20px;color:#444;font-size:0.9em;line-height:1.8;">
+          ${s.tips.map(t=>`<li>${t}</li>`).join('')}
+        </ul>
+      </div>
+    </div>`).join('');
+}
+function toggleSlope(i){
+  const body = document.getElementById('slope_body_'+i);
+  const arrow = document.getElementById('slope_arrow_'+i);
+  if (body.style.display==='none'){ body.style.display='block'; arrow.textContent='▲'; }
+  else { body.style.display='none'; arrow.textContent='▼'; }
+}
+
+initSupabase();
+renderSlopeGuide();
 </script>
 </body>
 </html>
