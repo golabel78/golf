@@ -96,6 +96,14 @@ body { font-family:'Noto Sans KR',-apple-system,sans-serif; background:linear-gr
 </div>
 
 <!-- 코스 추가/수정 -->
+<div id="holeTableView" class="view">
+  <span class="back-btn" onclick="show('dashboardView')" style="cursor:pointer;color:#2a5298;font-weight:600;display:inline-block;margin-bottom:12px;">← 대시보드</span>
+  <div class="card">
+    <h2 class="section-title" id="holeTableTitle">📊 홀별 기록</h2>
+    <div id="holeTableBody" style="overflow-x:auto;"></div>
+  </div>
+</div>
+
 <div id="courseEditView" class="view">
   <span class="back-btn" onclick="show('dashboardView')">← 대시보드</span>
   <div class="card">
@@ -208,6 +216,7 @@ const SEED = [{"id":"1","name":"Solmoro CC","holes":[{"number":1,"par":4,"dist":
 
 let courses = [];
 let roundRecords = [];
+let courseSessions = []; // 코스별 라운드 세션 원본 (홀별 표용)
 let current = { course:null, goals:{}, scores:{}, clubs:{}, notes:{}, actualClubs:{}, postNotes:{}, planClubs:{} };
 let editingCourseId = null;
 let editMaps = {};
@@ -279,8 +288,9 @@ async function loadCourses() {
       }
     } catch(e) {}
     try {
-      const rs = await sb.from('round_sessions').select('id,course_id,round_date,scores');
+      const rs = await sb.from('round_sessions').select('id,course_id,round_date,scores,clubs');
       if (!rs.error && rs.data) {
+        courseSessions = rs.data.map(s => ({ id:String(s.id), course_id:String(s.course_id), date:s.round_date, scores:s.scores||{}, clubs:s.clubs||{} }));
         rs.data.forEach(s => {
           const sc = s.scores||{};
           let total=0; Object.values(sc).forEach(v=>{ const n=parseInt(v); if(!isNaN(n)) total+=n; });
@@ -340,9 +350,61 @@ function renderDashboard() {
         <button class="btn btn-secondary" style="padding:6px 12px; font-size:0.85em;" onclick="editCourse('${c.id}')">✏️ 수정</button>
         <button class="btn btn-danger" style="padding:6px 12px; font-size:0.85em;" onclick="deleteCourse('${c.id}')">🗑️ 삭제</button>
         <button class="btn btn-primary" style="padding:6px 12px; font-size:0.85em;" onclick="startRound('${c.id}')">▶️ 라운드</button>
+        <button class="btn btn-secondary" style="padding:6px 12px; font-size:0.85em;" onclick="openHoleTable('${c.id}')">📊 홀별 기록</button>
       </div>
     </div>`;
   }).join('');
+}
+
+function openHoleTable(courseId){
+  const c = courses.find(x=>x.id===courseId); if(!c) return;
+  document.getElementById('holeTableTitle').textContent = '📊 '+c.name+' · 홀별 기록';
+  const body = document.getElementById('holeTableBody');
+  const sessions = (courseSessions||[]).filter(s=>s.course_id===courseId)
+    .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  if(!sessions.length){ body.innerHTML='<p style="color:#999;padding:12px;">저장된 라운드 기록이 없습니다.</p>'; return; }
+  const holes = c.holes;
+  // 헤더
+  let html = '<table style="border-collapse:collapse;font-size:0.85em;white-space:nowrap;min-width:100%;">';
+  html += '<tr style="background:#f0f4ff;">'
+    + '<th style="border:1px solid #ccd;padding:6px 8px;">방문날짜</th>'
+    + '<th style="border:1px solid #ccd;padding:6px 8px;">구분</th>'
+    + holes.map(h=>`<th style="border:1px solid #ccd;padding:6px 10px;color:#1e3c72;">${h.number}홀</th>`).join('')
+    + '<th style="border:1px solid #ccd;padding:6px 8px;background:#e8f0ff;">합계</th></tr>';
+  // Par 행
+  html += '<tr style="background:#fafcff;color:#888;font-size:0.92em;">'
+    + '<td style="border:1px solid #ccd;padding:4px 8px;"></td>'
+    + '<td style="border:1px solid #ccd;padding:4px 8px;">Par</td>'
+    + holes.map(h=>`<td style="border:1px solid #ccd;padding:4px 8px;text-align:center;">${h.par}</td>`).join('')
+    + `<td style="border:1px solid #ccd;padding:4px 8px;text-align:center;">${holes.reduce((s,h)=>s+Number(h.par||0),0)}</td></tr>`;
+  // 각 방문: 샷 행 + 퍼터 행
+  sessions.forEach(s=>{
+    const shotCells=[], puttCells=[];
+    let totShot=0, totPutt=0;
+    holes.forEach(h=>{
+      const arr = Array.isArray(s.clubs[h.number]) ? s.clubs[h.number].filter(x=>x) : [];
+      const sc = parseInt(s.scores[h.number]);
+      let shots='...', putts='...';
+      if(arr.length){
+        const p = arr.filter(x=>x==='PT').length;
+        const sh = arr.length - p;
+        shots=sh; putts=p; totShot+=sh; totPutt+=p;
+      } else if(!isNaN(sc)){
+        shots=sc; putts='-'; totShot+=sc; // 클럽 기록 없으면 총타수만
+      }
+      shotCells.push(`<td style="border:1px solid #ccd;padding:4px 8px;text-align:center;">${shots}</td>`);
+      puttCells.push(`<td style="border:1px solid #ccd;padding:4px 8px;text-align:center;">${putts}</td>`);
+    });
+    html += `<tr><td rowspan="2" style="border:1px solid #ccd;padding:6px 8px;vertical-align:middle;font-weight:600;">${s.date||'-'}</td>`
+      + `<td style="border:1px solid #ccd;padding:4px 8px;color:#2a5298;font-weight:600;">샷</td>${shotCells.join('')}`
+      + `<td style="border:1px solid #ccd;padding:4px 8px;text-align:center;font-weight:700;">${totShot||'-'}</td></tr>`;
+    html += `<tr><td style="border:1px solid #ccd;padding:4px 8px;color:#e65100;font-weight:600;">퍼터</td>${puttCells.join('')}`
+      + `<td style="border:1px solid #ccd;padding:4px 8px;text-align:center;font-weight:700;">${totPutt||'-'}</td></tr>`;
+  });
+  html += '</table>';
+  html += '<p style="font-size:0.75em;color:#999;margin-top:8px;">샷=풀스윙(그린까지) · 퍼터=PT 개수 · 클럽 기록이 없는 홀은 총타수만 표시(퍼터 -)</p>';
+  body.innerHTML = html;
+  show('holeTableView');
 }
 
 function openAddCourse() {
