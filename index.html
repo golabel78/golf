@@ -211,6 +211,8 @@ let roundRecords = [];
 let current = { course:null, goals:{}, scores:{}, clubs:{}, notes:{}, actualClubs:{}, postNotes:{}, planClubs:{} };
 let editingCourseId = null;
 let editMaps = {};
+let drawModeHole = null; // 홀맵 경로 그리기 모드
+const CLUB_DIST = {'DR':160,'3W':145,'HY':135,'5i':125,'6i':115,'7i':105,'8i':95,'9i':85,'PW':80,'52':65,'56':60,'PT':0};
 
 function setStatus(type, text) {
   const el = document.getElementById('cloudStatus');
@@ -268,11 +270,22 @@ async function loadCourses() {
     } else {
       courses = data.map(d => ({ id:String(d.id), name:d.name, holes:d.holes }));
     }
-    // 라운드 기록도 불러오기
+    // 라운드 기록 불러오기 (rounds + round_sessions 둘 다 병합 → 지난 기록 전부 표시)
+    roundRecords = [];
     try {
       const r = await sb.from('rounds').select('*');
       if (!r.error && r.data) {
-        roundRecords = r.data.map(x => ({ id:String(x.id), course_id:String(x.course_id), ...(x.data||{}) }));
+        r.data.forEach(x => roundRecords.push({ id:String(x.id), course_id:String(x.course_id), ...(x.data||{}) }));
+      }
+    } catch(e) {}
+    try {
+      const rs = await sb.from('round_sessions').select('id,course_id,round_date,scores');
+      if (!rs.error && rs.data) {
+        rs.data.forEach(s => {
+          const sc = s.scores||{};
+          let total=0; Object.values(sc).forEach(v=>{ const n=parseInt(v); if(!isNaN(n)) total+=n; });
+          if (total>0) roundRecords.push({ id:String(s.id), course_id:String(s.course_id), date:s.round_date, total });
+        });
       }
     } catch(e) {}
     setStatus('on','☁️ 클라우드 연결됨');
@@ -310,10 +323,18 @@ function renderDashboard() {
       recHtml = `<div style="background:#f0f4ff;border-radius:6px;padding:8px 10px;margin-top:8px;font-size:0.82em;color:#1e3c72;">
         📊 라운드 ${recs.length}회 · 베스트 ${best}타 · 최근 ${recs[recs.length-1].date||''}</div>`;
     }
+    const mapHoles = c.holes.filter(h=>h.map);
+    let thumb = '';
+    if(mapHoles.length){
+      thumb = `<div style="display:flex;gap:5px;overflow-x:auto;margin:8px 0;padding-bottom:4px;">`+
+        mapHoles.slice(0,6).map(h=>`<img src="${h.map}" style="height:56px;border-radius:5px;flex:0 0 auto;border:1px solid #dde;">`).join('')+
+        (mapHoles.length>6?`<span style="align-self:center;font-size:0.75em;color:#888;">+${mapHoles.length-6}</span>`:'')+`</div>`;
+    }
     return `
     <div class="course-card">
       <h3>${c.name}</h3>
-      <p>${c.holes.length}홀 · Par ${c.holes.reduce((s,h)=>s+Number(h.par||0),0)}</p>
+      <p>${c.holes.length}홀 · Par ${c.holes.reduce((s,h)=>s+Number(h.par||0),0)} · 홀맵 ${mapHoles.length}개</p>
+      ${thumb}
       ${recHtml}
       <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
         <button class="btn btn-secondary" style="padding:6px 12px; font-size:0.85em;" onclick="editCourse('${c.id}')">✏️ 수정</button>
@@ -459,6 +480,71 @@ function suggestStrategy(holeDist, par){
   return plan.join(' → ');
 }
 
+// ===== 홀맵 경로 그리기 (라운드 전 계획) : 코스에 영구 저장 =====
+function _findHole(holeNum){ return current.course.holes.find(x=>Number(x.number)===Number(holeNum)); }
+function holeMapInner(h){
+  if(!h.map) return '<div style="background:#f0f0f0;color:#999;padding:20px;text-align:center;border-radius:6px;margin-bottom:8px;font-size:0.82em;">홀맵 없음 (코스 수정에서 등록)</div>';
+  const drawing = (drawModeHole===h.number);
+  const wp = Array.isArray(h.waypoints)?h.waypoints:[];
+  const dist = parseInt(h.dist);
+  const clubs = (Array.isArray(current.planClubs[h.number])?current.planClubs[h.number]:[]).filter(c=>c && c!=='PT');
+  const N = clubs.length;
+  const tee = wp[0], pin = wp[1], dirs = wp.slice(2);
+  let svg='', labels='';
+  const lbl = (x,y,bg,txt)=>`<div style="position:absolute;left:${(x*100)}%;top:${(y*100)}%;transform:translate(-50%,-150%);background:${bg};color:#fff;font-size:9px;padding:1px 4px;border-radius:3px;white-space:nowrap;">${txt}</div>`;
+  if(tee){ svg+=`<circle cx="${(tee.x*100).toFixed(1)}" cy="${(tee.y*100).toFixed(1)}" r="1.8" fill="#2e7d32" stroke="#fff" stroke-width="0.5"/>`; labels+=lbl(tee.x,tee.y,'#2e7d32','티'); }
+  if(tee&&pin){
+    svg+=`<line x1="${(tee.x*100).toFixed(1)}" y1="${(tee.y*100).toFixed(1)}" x2="${(pin.x*100).toFixed(1)}" y2="${(pin.y*100).toFixed(1)}" stroke="#fff" stroke-width="0.9" stroke-dasharray="1.5,1.5" opacity="0.55"/>`;
+    svg+=`<circle cx="${(pin.x*100).toFixed(1)}" cy="${(pin.y*100).toFixed(1)}" r="1.8" fill="#c62828" stroke="#fff" stroke-width="0.5"/>`; labels+=lbl(pin.x,pin.y,'#c62828','핀');
+  }
+  if(tee&&pin&&dist>0&&N>0){
+    const teePin=Math.hypot(pin.x-tee.x,pin.y-tee.y); const normPerM=teePin>0?teePin/dist:0;
+    let start=tee,cumM=0;
+    for(let i=0;i<N&&i<dirs.length;i++){
+      let vx=dirs[i].x-start.x,vy=dirs[i].y-start.y; const vlen=Math.hypot(vx,vy); if(vlen===0)continue; vx/=vlen; vy/=vlen;
+      const segNorm=(CLUB_DIST[clubs[i]]||0)*normPerM; const end={x:start.x+vx*segNorm,y:start.y+vy*segNorm};
+      cumM+=(CLUB_DIST[clubs[i]]||0); const rem=Math.max(Math.round(dist-cumM),0);
+      svg+=`<line x1="${(start.x*100).toFixed(1)}" y1="${(start.y*100).toFixed(1)}" x2="${(end.x*100).toFixed(1)}" y2="${(end.y*100).toFixed(1)}" stroke="#ff9800" stroke-width="1.3"/>`;
+      svg+=`<circle cx="${(end.x*100).toFixed(1)}" cy="${(end.y*100).toFixed(1)}" r="1.4" fill="#ff9800" stroke="#fff" stroke-width="0.4"/>`;
+      labels+=lbl(end.x,end.y,'rgba(0,0,0,0.7)',`${clubs[i]}·남${rem}m`);
+      start=end;
+    }
+  }
+  let hint;
+  if(!tee)hint='① 티 위치를 탭';
+  else if(!pin)hint='② 핀 위치를 탭 (스케일 기준)';
+  else if(N===0)hint='계획 클럽을 먼저 선택하세요';
+  else hint=`③ 클럽 방향 순서대로 탭 (${Math.min(dirs.length,N)}/${N})`;
+  return `
+    <div id="hmwrap_${h.number}" style="position:relative;margin-bottom:5px;">
+      <img src="${h.map}" id="hmimg_${h.number}" style="width:100%;border-radius:6px;display:block;${drawing?'cursor:crosshair;':''}" onclick="mapTap(event,${h.number})">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;">${svg}</svg>
+      <div style="position:absolute;inset:0;pointer-events:none;">${labels}</div>
+    </div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+      <button class="btn ${drawing?'btn-success':'btn-secondary'}" style="padding:5px 10px;font-size:0.78em;margin:0;" onclick="toggleDraw(${h.number})">${drawing?'✓ 그리는 중 — 탭하여 지정':'🖊️ 경로 그리기'}</button>
+      <button class="btn btn-secondary" style="padding:5px 10px;font-size:0.78em;margin:0;" onclick="undoPoint(${h.number})">↶ 취소</button>
+      <button class="btn btn-secondary" style="padding:5px 10px;font-size:0.78em;margin:0;" onclick="clearPath(${h.number})">초기화</button>
+      <span style="font-size:0.72em;color:#1e3c72;font-weight:600;">${drawing?hint:(tee&&pin?'초록=티 빨강=핀 주황=도달점':'🖊️ 경로 그리기로 시작')}</span>
+    </div>`;
+}
+function refreshHoleMap(holeNum){ const box=document.getElementById('hmbox_'+holeNum); if(!box)return; const h=_findHole(holeNum); if(h) box.innerHTML=holeMapInner(h); }
+function mapTap(evt, holeNum){
+  if(drawModeHole!==holeNum) return;
+  const img=document.getElementById('hmimg_'+holeNum); if(!img)return;
+  const rect=img.getBoundingClientRect();
+  const x=(evt.clientX-rect.left)/rect.width, y=(evt.clientY-rect.top)/rect.height;
+  if(x<0||x>1||y<0||y>1)return;
+  const h=_findHole(holeNum); if(!h)return;
+  if(!Array.isArray(h.waypoints)) h.waypoints=[];
+  h.waypoints.push({x:+x.toFixed(4), y:+y.toFixed(4)});
+  refreshHoleMap(holeNum);
+  saveCourseToCloud(current.course);
+}
+function toggleDraw(holeNum){ drawModeHole=(drawModeHole===holeNum)?null:holeNum; refreshHoleMap(holeNum); }
+function undoPoint(holeNum){ const h=_findHole(holeNum); if(h&&Array.isArray(h.waypoints)&&h.waypoints.length){ h.waypoints.pop(); refreshHoleMap(holeNum); saveCourseToCloud(current.course); } }
+function clearPath(holeNum){ if(confirm('이 홀의 경로를 초기화할까요?')){ const h=_findHole(holeNum); if(h){ h.waypoints=[]; refreshHoleMap(holeNum); saveCourseToCloud(current.course); } } }
+
 function renderPrep(){
   document.getElementById('prepGrid').innerHTML=current.course.holes.map(h=>{
     const strategy = suggestStrategy(h.dist, h.par);
@@ -479,7 +565,7 @@ function renderPrep(){
     return `
     <div class="hole-card">
       <div class="hole-number">홀 ${h.number} (Par ${h.par}${h.dist?', '+h.dist+'m':''})</div>
-      ${h.map?`<img src="${h.map}" style="width:100%;border-radius:6px;margin-bottom:8px;">`:'<div style="background:#f0f0f0;color:#999;padding:20px;text-align:center;border-radius:6px;margin-bottom:8px;font-size:0.82em;">홀맵 없음 (코스 수정에서 등록)</div>'}
+      <div id="hmbox_${h.number}">${holeMapInner(h)}</div>
       ${strategy?`<div style="background:#e8f0ff;color:#1e3c72;padding:8px 10px;border-radius:6px;font-size:0.82em;margin-bottom:8px;"><b>🎯 추천 공략:</b><br>${strategy}</div>`:''}
       <div class="hole-input"><label>🏌️ 나의 계획 클럽 (드롭다운, 칸 자동 추가)</label>${planSelects}</div>
       ${planText?`<div style="background:#fff3cd;color:#856404;padding:6px 10px;border-radius:6px;font-size:0.85em;font-weight:600;text-align:center;margin-bottom:8px;">📋 내 계획: ${planText}</div>`:''}
