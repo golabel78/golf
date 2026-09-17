@@ -62,6 +62,10 @@ body { font-family:'Noto Sans KR',-apple-system,sans-serif; background:linear-gr
 .map-upload-cell .clearmap { color:#c00; cursor:pointer; font-size:0.8em; }
 .spinner { text-align:center; padding:40px; color:#fff; font-size:1.1em; }
 @media(max-width:768px){ .header h1{font-size:1.5em;} .hole-grid{grid-template-columns:1fr;} .button-group{flex-direction:column;} .hole-edit-row{grid-template-columns:40px 1fr 1fr;} }
+.hole-tabs { position:sticky; top:0; z-index:30; background:#fff; display:flex; gap:5px; overflow-x:auto; padding:8px 2px; margin:0 -4px 10px; box-shadow:0 3px 8px rgba(0,0,0,0.08); -webkit-overflow-scrolling:touch; }
+.hole-tab { flex:0 0 auto; min-width:40px; padding:7px 4px; text-align:center; background:#eef3ff; color:#1e3c72; border:1px solid #cdddff; border-radius:6px; font-size:0.8em; font-weight:700; cursor:pointer; }
+.hole-tab.done { background:#2a5298; color:#fff; }
+.plan-total { background:linear-gradient(135deg,#2a5298,#1e3c72); color:#fff; padding:16px; border-radius:10px; text-align:center; margin:14px 0; }
 </style>
 </head>
 <body>
@@ -104,6 +108,14 @@ body { font-family:'Noto Sans KR',-apple-system,sans-serif; background:linear-gr
   </div>
 </div>
 
+<div id="analysisView" class="view">
+  <span class="back-btn" onclick="show('dashboardView')" style="cursor:pointer;color:#2a5298;font-weight:600;display:inline-block;margin-bottom:12px;">← 대시보드</span>
+  <div class="card">
+    <h2 class="section-title" id="analysisTitle">📈 코스매니지먼트 분석</h2>
+    <div id="analysisBody"></div>
+  </div>
+</div>
+
 <div id="courseEditView" class="view">
   <span class="back-btn" onclick="show('dashboardView')">← 대시보드</span>
   <div class="card">
@@ -143,7 +155,9 @@ body { font-family:'Noto Sans KR',-apple-system,sans-serif; background:linear-gr
       <div class="input-field"><label>그린스피드</label><input type="text" id="r_greenspeed" placeholder="예: 14.5"></div>
     </div>
     <h3 style="color:#1e3c72; margin:18px 0 12px;">🎯 각 홀 목표</h3>
+    <div class="hole-tabs" id="prepHoleTabs"></div>
     <div class="hole-grid" id="prepGrid"></div>
+    <div id="prepPlanTotal"></div>
     <div class="button-group"><button class="btn btn-success" onclick="goInput()">✓ 라운드 시작</button></div>
   </div>
 </div>
@@ -157,6 +171,7 @@ body { font-family:'Noto Sans KR',-apple-system,sans-serif; background:linear-gr
       <div class="score-box"><div class="score-number" id="liveTotal">-</div><div class="score-label">합계 (par 대비)</div></div>
       <div class="score-box"><div class="score-number" id="liveVsPar">-</div><div class="score-label">총 스코어</div></div>
     </div>
+    <div class="hole-tabs" id="inputHoleTabs"></div>
     <div id="inputGrid"></div>
     <div class="button-group"><button class="btn btn-success" onclick="goPost()">✓ 라운드 완료</button></div>
   </div>
@@ -351,9 +366,95 @@ function renderDashboard() {
         <button class="btn btn-danger" style="padding:6px 12px; font-size:0.85em;" onclick="deleteCourse('${c.id}')">🗑️ 삭제</button>
         <button class="btn btn-primary" style="padding:6px 12px; font-size:0.85em;" onclick="startRound('${c.id}')">▶️ 라운드</button>
         <button class="btn btn-secondary" style="padding:6px 12px; font-size:0.85em;" onclick="openHoleTable('${c.id}')">📊 홀별 기록</button>
+        <button class="btn btn-secondary" style="padding:6px 12px; font-size:0.85em;" onclick="openAnalysis('${c.id}')">📈 분석</button>
       </div>
     </div>`;
   }).join('');
+}
+
+function openAnalysis(courseId){
+  const c = courses.find(x=>x.id===courseId); if(!c) return;
+  document.getElementById('analysisTitle').textContent = '📈 '+c.name+' · 코스매니지먼트 분석';
+  const body = document.getElementById('analysisBody');
+  const sessions = (courseSessions||[]).filter(s=>s.course_id===courseId)
+    .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  if(!sessions.length){ body.innerHTML='<p style="color:#999;padding:12px;">분석할 라운드 기록이 없습니다.</p>'; return; }
+  const holes = c.holes;
+
+  // 집계 (클럽 기록 있는 홀만 정밀 분석)
+  let totPutt=0, threePutt=0, holesWithClub=0, girHit=0, girEligible=0;
+  let missOnLossSum=0, missOnCount=0;
+  const parAgg = {3:{n:0,over:0},4:{n:0,over:0},5:{n:0,over:0}};
+  const perRound = []; // {date, total, putts}
+  sessions.forEach(s=>{
+    let rTotal=0, rPutt=0, rScored=0;
+    holes.forEach(h=>{
+      const arr = Array.isArray(s.clubs[h.number]) ? s.clubs[h.number].filter(x=>x) : [];
+      const sc = parseInt(s.scores[h.number]);
+      if(!isNaN(sc)){ rTotal+=sc; rScored++; if(parAgg[h.par]){ parAgg[h.par].n++; parAgg[h.par].over+=(sc-h.par); } }
+      if(arr.length){
+        holesWithClub++;
+        const p = arr.filter(x=>x==='PT').length;
+        const firstPT = arr.indexOf('PT');
+        const onShots = firstPT===-1 ? arr.length : firstPT; // 그린 도달까지 풀스윙 수
+        totPutt+=p; rPutt+=p;
+        if(p>=3) threePutt++;
+        // 파온(규정타 내 온): 온샷 ≤ par-2
+        if(firstPT!==-1){ girEligible++; if(onShots <= h.par-2) girHit++; else { missOnCount++; if(!isNaN(sc)) missOnLossSum += (sc-h.par); } }
+      }
+    });
+    perRound.push({date:s.date||'-', total:rTotal, putts:rPutt});
+  });
+
+  const avgPutt = holesWithClub ? (totPutt/holesWithClub) : null;
+  const girPct = girEligible ? Math.round(girHit/girEligible*100) : null;
+  const missOnAvg = missOnCount ? (missOnLossSum/missOnCount) : null;
+
+  const box = (label,val,sub,color)=>`<div style="background:#eef3ff;padding:12px;border-radius:8px;text-align:center;">
+    <div style="font-size:1.4em;font-weight:bold;color:${color||'#1e3c72'};">${val}</div>
+    <div style="font-size:0.72em;color:#666;margin-top:2px;">${label}</div>${sub?`<div style="font-size:0.66em;color:#999;">${sub}</div>`:''}</div>`;
+
+  let html = `<div style="font-size:0.8em;color:#888;margin-bottom:12px;">분석 대상: ${sessions.length}개 라운드 · 클럽 기록 있는 ${holesWithClub}홀 기준</div>`;
+
+  // 1) 핵심 지표
+  html += `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px;">
+    ${box('홀당 평균 퍼트', avgPutt!=null?avgPutt.toFixed(2):'-','', avgPutt!=null&&avgPutt>2.0?'#c62828':'#2e7d32')}
+    ${box('3퍼트 홀', threePutt+'개','', threePutt>0?'#e65100':'#2e7d32')}
+    ${box('파온율(규정타내)', girPct!=null?girPct+'%':'-','', girPct!=null&&girPct<40?'#c62828':'#2e7d32')}
+  </div>`;
+  html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:18px;">
+    ${box('총 퍼트', totPutt+'회','전체 라운드 합')}
+    ${box('파온 실패 시 평균 손실', missOnAvg!=null?('+'+missOnAvg.toFixed(1)+'타'):'-','온 못한 홀 리커버리', missOnAvg!=null&&missOnAvg>1.2?'#c62828':'#1e3c72')}
+  </div>`;
+
+  // 2) 홀 유형별
+  html += `<h3 style="color:#1e3c72;margin:16px 0 8px;font-size:1.05em;">📐 홀 유형별 성적</h3>`;
+  html += `<table style="width:100%;border-collapse:collapse;font-size:0.85em;margin-bottom:16px;"><tr style="background:#2a5298;color:#fff;"><th style="padding:6px;">유형</th><th>홀수</th><th>평균(vs Par)</th></tr>`;
+  let worstPar=null, worstAvg=-99;
+  [3,4,5].forEach(par=>{ const b=parAgg[par]; if(!b.n) return; const avg=b.over/b.n; if(avg>worstAvg){worstAvg=avg;worstPar=par;}
+    html += `<tr style="text-align:center;border-bottom:1px solid #eee;"><td style="padding:6px;">Par ${par}</td><td>${b.n}</td><td style="color:${avg>0.5?'#c62828':(avg<=0?'#2e7d32':'#333')};font-weight:600;">${avg>0?'+':''}${avg.toFixed(1)}</td></tr>`; });
+  html += `</table>`;
+
+  // 3) 회차 추세
+  html += `<h3 style="color:#1e3c72;margin:16px 0 8px;font-size:1.05em;">📈 방문 회차별 추세</h3>`;
+  html += `<table style="width:100%;border-collapse:collapse;font-size:0.85em;margin-bottom:16px;"><tr style="background:#f0f4ff;"><th style="padding:6px;border:1px solid #ccd;">방문일</th><th style="border:1px solid #ccd;">총타수</th><th style="border:1px solid #ccd;">퍼트</th></tr>`;
+  perRound.forEach(r=>{ html += `<tr style="text-align:center;"><td style="padding:5px;border:1px solid #ccd;">${r.date}</td><td style="border:1px solid #ccd;">${r.total||'-'}</td><td style="border:1px solid #ccd;">${r.putts||'-'}</td></tr>`; });
+  html += `</table>`;
+
+  // 4) 자동 진단 코멘트
+  const tips=[];
+  if(avgPutt!=null){ if(avgPutt>2.0) tips.push(`🔴 <b>퍼팅이 약점</b>: 홀당 평균 ${avgPutt.toFixed(2)}퍼트 (목표 2.0 이하). 라운드당 약 ${((avgPutt-2.0)*holesWithClub/sessions.length).toFixed(1)}타를 퍼팅에서 손실.`); else tips.push(`🟢 <b>퍼팅 양호</b>: 홀당 ${avgPutt.toFixed(2)}퍼트.`); }
+  if(threePutt>0) tips.push(`⚠️ 3퍼트 ${threePutt}회 — 롱퍼트 거리감/그린 경사 연습 권장.`);
+  if(girPct!=null){ if(girPct<40) tips.push(`🔴 <b>파온율 낮음(${girPct}%)</b>: 티샷·어프로치 정확도 또는 클럽 선택 재점검. 온을 못하면 리커버리에서 타수가 샌다.`); else tips.push(`🟢 파온율 ${girPct}% — 준수.`); }
+  if(missOnAvg!=null && missOnAvg>1.2) tips.push(`🔴 <b>온 실패 시 손실 큼(+${missOnAvg.toFixed(1)}타)</b>: 숏게임(어프로치+퍼트) 리커버리가 약함. 그린 주변 어프로치 집중 연습.`);
+  if(worstPar!=null && worstAvg>0.5) tips.push(`🎯 <b>Par ${worstPar}에서 가장 약함</b>(평균 +${worstAvg.toFixed(1)}). ${worstPar===3?'그린 적중(티샷 클럽 선택)':worstPar===5?'세컨샷 레이업 전략/3온 관리':'티샷 방향성·세컨 어프로치'} 점검.`);
+  if(!tips.length) tips.push('데이터가 더 쌓이면 정밀 진단이 가능합니다.');
+  html += `<h3 style="color:#1e3c72;margin:16px 0 8px;font-size:1.05em;">💡 자동 진단</h3>`;
+  html += `<div style="background:#fffdf5;border:1px solid #ffe0b2;border-radius:8px;padding:12px;font-size:0.88em;line-height:1.9;">${tips.map(t=>'• '+t).join('<br>')}</div>`;
+  html += `<p style="font-size:0.72em;color:#999;margin-top:10px;">※ 파온율=규정타(Par−2) 이내 온그린 비율 / 샷·퍼트는 클럽 기록의 PT 개수로 산출. 클럽 기록 없는 홀은 정밀 분석에서 제외됩니다.</p>`;
+
+  body.innerHTML = html;
+  show('analysisView');
 }
 
 function openHoleTable(courseId){
@@ -608,9 +709,15 @@ function undoPoint(holeNum){ const h=_findHole(holeNum); if(h&&Array.isArray(h.w
 function clearPath(holeNum){ if(confirm('이 홀의 경로를 초기화할까요?')){ const h=_findHole(holeNum); if(h){ h.waypoints=[]; refreshHoleMap(holeNum); saveCourseToCloud(current.course); } } }
 
 function renderPrep(){
-  document.getElementById('prepGrid').innerHTML=current.course.holes.map(h=>{
+  const hs = current.course.holes;
+  // 홀별 계획 타수(선택 클럽 수) + 누계
+  let cum = 0, totalPlan = 0, totalPar = 0;
+  const planStrokes = hs.map(h=>{
+    const plan = Array.isArray(current.planClubs[h.number]) ? current.planClubs[h.number].filter(s=>s) : [];
+    return plan.length;
+  });
+  document.getElementById('prepGrid').innerHTML = hs.map((h,hi)=>{
     const strategy = suggestStrategy(h.dist, h.par);
-    // 계획 클럽 (저장된 값 or 빈 배열)
     let plan = current.planClubs[h.number] || [];
     if (!Array.isArray(plan)) plan = [];
     const filled = plan.filter(s=>s).length;
@@ -624,17 +731,38 @@ function renderPrep(){
       </select>`;
     }
     const planText = plan.filter(s=>s).join(' → ');
+    const st = planStrokes[hi];
+    cum += st; totalPar += Number(h.par)||0;
+    const diff = st - h.par;
+    const calcLine = st>0
+      ? `<div style="background:#e8f5e9;color:#1b5e20;padding:7px 10px;border-radius:6px;font-size:0.85em;font-weight:600;text-align:center;margin-bottom:8px;">📐 계획 타수 <b>${st}</b> (Par ${h.par}, ${diff>0?'+':''}${diff}) · 누계 <b>${cum}</b>타</div>`
+      : `<div style="background:#f5f5f5;color:#999;padding:7px 10px;border-radius:6px;font-size:0.82em;text-align:center;margin-bottom:8px;">계획 클럽을 선택하면 타수가 계산됩니다</div>`;
     return `
-    <div class="hole-card">
+    <div class="hole-card" id="prepcard_${h.number}">
       <div class="hole-number">홀 ${h.number} (Par ${h.par}${h.dist?', '+h.dist+'m':''})</div>
       <div id="hmbox_${h.number}">${holeMapInner(h)}</div>
       ${strategy?`<div style="background:#e8f0ff;color:#1e3c72;padding:8px 10px;border-radius:6px;font-size:0.82em;margin-bottom:8px;"><b>🎯 추천 공략:</b><br>${strategy}</div>`:''}
       <div class="hole-input"><label>🏌️ 나의 계획 클럽 (드롭다운, 칸 자동 추가)</label>${planSelects}</div>
       ${planText?`<div style="background:#fff3cd;color:#856404;padding:6px 10px;border-radius:6px;font-size:0.85em;font-weight:600;text-align:center;margin-bottom:8px;">📋 내 계획: ${planText}</div>`:''}
+      ${calcLine}
       <div class="hole-input"><label>📝 메모 (선택)</label><textarea onchange="current.goals[${h.number}]=this.value" style="min-height:45px;" placeholder="추가 전략·메모">${current.goals[h.number]||''}</textarea></div>
     </div>`;
   }).join('');
+  totalPlan = planStrokes.reduce((s,x)=>s+x,0);
+  const plannedHoles = planStrokes.filter(x=>x>0).length;
+  // 홀 네비 탭
+  const tabs = document.getElementById('prepHoleTabs');
+  if(tabs) tabs.innerHTML = hs.map(h=>`<div class="hole-tab ${planStrokes[hs.indexOf(h)]>0?'done':''}" onclick="jumpHole('prepcard_',${h.number})">${h.number}H</div>`).join('');
+  // 계획 총타수
+  const totEl = document.getElementById('prepPlanTotal');
+  if(totEl){
+    if(totalPlan>0){
+      const d = totalPlan - totalPar;
+      totEl.innerHTML = `<div class="plan-total"><div style="font-size:1.8em;font-weight:bold;">${totalPlan}타 <span style="font-size:0.55em;opacity:0.85;">(${d>0?'+':''}${d})</span></div><div style="font-size:0.8em;opacity:0.9;">내 계획 총타수 · Par ${totalPar} · 계획 완료 ${plannedHoles}/${hs.length}홀</div></div>`;
+    } else { totEl.innerHTML=''; }
+  }
 }
+function jumpHole(prefix, n){ const el=document.getElementById(prefix+n); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); }
 function setPlanClub(holeNum, idx, val){
   if (!Array.isArray(current.planClubs[holeNum])) current.planClubs[holeNum] = [];
   current.planClubs[holeNum][idx] = val;
@@ -686,7 +814,7 @@ function holeInputCard(h){
       ${strategy?`<div style="margin-top:3px;"><b>🎯 추천:</b> ${strategy}</div>`:''}
       ${current.goals[h.number]?`<div style="margin-top:3px;">📝 ${current.goals[h.number]}</div>`:''}
     </div>` : '';
-  return `<div class="hole-card">
+  return `<div class="hole-card" id="inputcard_${h.number}">
     <div class="hole-number">홀 ${h.number} (Par ${h.par}${h.dist?', '+h.dist+'m':''})</div>
     ${h.map?`<img src="${h.map}" style="width:100%;border-radius:6px;margin-bottom:8px;">`:''}
     ${planBox}
@@ -739,6 +867,8 @@ function renderInput(){
     html+=`<div class="nine-title">🏌️ Back 9: ${b}</div><div class="hole-grid">`+hs.slice(half).map(holeInputCard).join('')+'</div>';
   }
   document.getElementById('inputGrid').innerHTML=html; updateLive();
+  const tabs=document.getElementById('inputHoleTabs');
+  if(tabs) tabs.innerHTML = hs.map(h=>{ const shots=Array.isArray(current.clubs[h.number])?current.clubs[h.number].filter(s=>s):[]; return `<div class="hole-tab ${shots.length>0?'done':''}" onclick="jumpHole('inputcard_',${h.number})">${h.number}H</div>`; }).join('');
 }
 function goPost(){ renderPost(); show('postView'); }
 function holePostCard(h){
