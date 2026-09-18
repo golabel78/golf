@@ -667,41 +667,51 @@ function onMapImgLoad(holeNum){
 function holeMapInner(h){
   if(!h.map) return '<div style="background:#f0f0f0;color:#999;padding:20px;text-align:center;border-radius:6px;margin-bottom:8px;font-size:0.82em;">홀맵 없음 (코스 수정에서 등록)</div>';
   const drawing = (drawModeHole===h.number);
-  const wp = Array.isArray(h.waypoints)?h.waypoints:[];  // [티, 코너들..., 핀]
+  const wp = Array.isArray(h.waypoints)?h.waypoints:[];  // [티, 핀, 방향1, 방향2, ...]
   const dist = parseInt(h.dist);
   const ar = _ar(h);
   const clubs = (Array.isArray(current.planClubs[h.number])?current.planClubs[h.number]:[]).filter(c=>c && c!=='PT');
+  const tee = wp[0], pin = wp[1], dirs = wp.slice(2);
   let svg='', dots='';
   const dot=(x,y,color,r)=>`<div style="position:absolute;left:${(x*100)}%;top:${(y*100)}%;width:${r}px;height:${r}px;background:${color};border:1.5px solid #fff;border-radius:50%;transform:translate(-50%,-50%);box-shadow:0 0 2px rgba(0,0,0,.5);"></div>`;
   const lbl=(x,y,bg,txt)=>`<div style="position:absolute;left:${(x*100)}%;top:${(y*100)}%;transform:translate(-50%,-170%);background:${bg};color:#fff;font-size:9px;padding:1px 4px;border-radius:3px;white-space:nowrap;">${txt}</div>`;
-  // 경로 선 (실제 추적 경로)
-  if(wp.length>=2){
-    const pts = wp.map(p=>`${(p.x*100).toFixed(1)},${(p.y*100).toFixed(1)}`).join(' ');
-    svg += `<polyline points="${pts}" fill="none" stroke="#fff" stroke-width="1" opacity="0.7"/>`;
-    svg += `<polyline points="${pts}" fill="none" stroke="#2a5298" stroke-width="0.5" stroke-dasharray="2,1.2"/>`;
+  // 티 마커
+  if(tee) dots += dot(tee.x,tee.y,'#2e7d32',13)+lbl(tee.x,tee.y,'#2e7d32','티');
+  // 핀 마커 + 티~핀 기준선(점선)
+  if(tee&&pin){
+    svg += `<line x1="${(tee.x*100).toFixed(1)}" y1="${(tee.y*100).toFixed(1)}" x2="${(pin.x*100).toFixed(1)}" y2="${(pin.y*100).toFixed(1)}" stroke="#fff" stroke-width="0.9" stroke-dasharray="1.5,1.5" opacity="0.5"/>`;
+    dots += dot(pin.x,pin.y,'#c62828',13)+lbl(pin.x,pin.y,'#c62828','핀');
   }
-  // 티/핀/코너 점 (HTML div — 비율 왜곡 없음)
-  wp.forEach((p,i)=>{
-    if(i===0) dots += dot(p.x,p.y,'#2e7d32',13)+lbl(p.x,p.y,'#2e7d32','티');
-    else if(i===wp.length-1 && wp.length>=2) dots += dot(p.x,p.y,'#c62828',13)+lbl(p.x,p.y,'#c62828','핀');
-    else dots += dot(p.x,p.y,'#888',8);
-  });
-  // 클럽 도달점 (경로 따라 실측)
-  if(wp.length>=2 && dist>0 && clubs.length){
-    const totalLen = _pathLenC(wp, ar);
-    let cumM=0;
-    clubs.forEach(c=>{
-      cumM += (CLUB_DIST[c]||0);
-      const frac = Math.min(cumM/dist,1);
-      const pt = _pointAtC(wp, ar, frac*totalLen);
-      const rem = Math.max(Math.round(dist-cumM),0);
-      dots += dot(pt.x,pt.y,'#ff9800',11) + lbl(pt.x,pt.y,'rgba(0,0,0,0.75)',`${c}·남${rem}m`);
-    });
+  // 방향 지정 + 도그렉 반영: 내가 찍은 경로(티→방향점들→핀) 전체길이 = 전장.
+  // 클럽은 그 경로를 따라 거리만큼 진행, 남은거리 = 경로 따라 핀까지.
+  if(tee&&pin&&dist>0&&clubs.length){
+    // 경로 = [티, ...방향점들, 핀]
+    const path = [tee, ...dirs, pin];
+    // 각 구간 보정길이 + 전체
+    const segLen=[]; let totalC=0;
+    for(let i=1;i<path.length;i++){ const l=Math.hypot(path[i].x-path[i-1].x,(path[i].y-path[i-1].y)/ar); segLen.push(l); totalC+=l; }
+    const perM = totalC>0 ? totalC/dist : 0;  // 보정단위/미터 (경로 전체 = 전장)
+    // 경로 위 보정거리 d(0~totalC) 지점의 정규화 좌표
+    const ptAt=(dc)=>{ let acc=0; for(let i=0;i<segLen.length;i++){ if(acc+segLen[i]>=dc||i===segLen.length-1){ const t=segLen[i]?Math.min((dc-acc)/segLen[i],1):0; return {x:path[i].x+(path[i+1].x-path[i].x)*t, y:path[i].y+(path[i+1].y-path[i].y)*t}; } acc+=segLen[i]; } return pin; };
+    // 경로 점선(파랑) 표시
+    const polyPts = path.map(p=>`${(p.x*100).toFixed(1)},${(p.y*100).toFixed(1)}`).join(' ');
+    svg += `<polyline points="${polyPts}" fill="none" stroke="#2a5298" stroke-width="0.5" stroke-dasharray="2,1.2" opacity="0.7"/>`;
+    let cumM=0, prev=tee;
+    for(let i=0;i<clubs.length;i++){
+      cumM += (CLUB_DIST[clubs[i]]||0);
+      const along = Math.min(cumM*perM, totalC);   // 경로 따라 진행한 보정거리
+      const end = ptAt(along);
+      const rem = Math.max(Math.round(dist-cumM),0);  // 경로 따라 핀까지 남은거리
+      svg += `<line x1="${(prev.x*100).toFixed(1)}" y1="${(prev.y*100).toFixed(1)}" x2="${(end.x*100).toFixed(1)}" y2="${(end.y*100).toFixed(1)}" stroke="#ff9800" stroke-width="1.1"/>`;
+      dots += dot(end.x,end.y,'#ff9800',11) + lbl(end.x,end.y,'rgba(0,0,0,0.75)',`${clubs[i]}·남${rem}m`);
+      prev=end;
+    }
   }
   let hint;
-  if(!wp.length) hint='① 티 위치부터 탭';
-  else if(wp.length===1) hint='② 도그렉이면 코너, 아니면 핀을 탭';
-  else hint=`경로 ${wp.length}점 (마지막=핀) · 코너 더 찍거나 완료`;
+  if(!tee) hint='① 티 위치를 탭';
+  else if(!pin) hint='② 핀 위치를 탭 (전장 기준)';
+  else if(clubs.length===0) hint='아래에서 계획 클럽을 선택하세요';
+  else hint=`③ 도그렉이면 꺾이는 지점→핀 순서로 방향 탭 (${dirs.length}점) · 경로 전체=전장`;
   return `
     <div id="hmwrap_${h.number}" style="position:relative;margin-bottom:5px;">
       <img src="${h.map}" id="hmimg_${h.number}" onload="onMapImgLoad(${h.number})" style="width:100%;border-radius:6px;display:block;${drawing?'cursor:crosshair;':''}" onclick="mapTap(event,${h.number})">
@@ -712,7 +722,7 @@ function holeMapInner(h){
       <button class="btn ${drawing?'btn-success':'btn-secondary'}" style="padding:5px 10px;font-size:0.78em;margin:0;" onclick="toggleDraw(${h.number})">${drawing?'✓ 그리는 중 — 탭':'🖊️ 경로 그리기'}</button>
       <button class="btn btn-secondary" style="padding:5px 10px;font-size:0.78em;margin:0;" onclick="undoPoint(${h.number})">↶ 취소</button>
       <button class="btn btn-secondary" style="padding:5px 10px;font-size:0.78em;margin:0;" onclick="clearPath(${h.number})">초기화</button>
-      <span style="font-size:0.72em;color:#1e3c72;font-weight:600;">${drawing?hint:(wp.length>=2?'초록=티 빨강=핀 주황=클럽도달점':'🖊️ 경로 그리기로 시작')}</span>
+      <span style="font-size:0.72em;color:#1e3c72;font-weight:600;">${drawing?hint:(tee&&pin?'초록=티 빨강=핀 주황=클럽 도달점(방향만 지정, 거리 자동)':'🖊️ 경로 그리기로 시작')}</span>
     </div>`;
 }
 function refreshHoleMap(holeNum){ const box=document.getElementById('hmbox_'+holeNum); if(!box)return; const h=_findHole(holeNum); if(h) box.innerHTML=holeMapInner(h); }
