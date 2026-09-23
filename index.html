@@ -664,9 +664,8 @@ function onMapImgLoad(holeNum){
     if(!h.mapAR || Math.abs(h.mapAR-ar)>0.01){ h.mapAR=ar; refreshHoleMap(holeNum); }
   }
 }
-function holeMapInner(h){
-  if(!h.map) return '<div style="background:#f0f0f0;color:#999;padding:20px;text-align:center;border-radius:6px;margin-bottom:8px;font-size:0.82em;">홀맵 없음 (코스 수정에서 등록)</div>';
-  const drawing = (drawModeHole===h.number);
+// 홀맵 오버레이(경로/클럽 도달점) 생성 — 라운드 전 그리기 & 라운드 중 표시 공용
+function _mapOverlay(h){
   const wp = Array.isArray(h.waypoints)?h.waypoints:[];  // [티, 핀, 방향1, 방향2, ...]
   const dist = parseInt(h.dist);
   const ar = _ar(h);
@@ -707,6 +706,34 @@ function holeMapInner(h){
       prev=end;
     }
   }
+  return { svg, dots, hasPath: !!(tee&&pin) };
+}
+// 라운드 중/후: 그린 경로를 읽기전용으로 표시 (그리기 버튼 없음)
+function holeMapView(h){
+  if(!h.map) return '';
+  const { svg, dots, hasPath } = _mapOverlay(h);
+  return `<div id="vmap_${h.number}" style="position:relative;margin-bottom:8px;">
+      <img src="${h.map}" id="vmimg_${h.number}" onload="onViewImgLoad(${h.number})" style="width:100%;border-radius:6px;display:block;">
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;">${svg}</svg>
+      <div style="position:absolute;inset:0;pointer-events:none;">${dots}</div>
+      ${hasPath?'<div style="position:absolute;top:4px;right:6px;background:rgba(0,0,0,0.55);color:#fff;font-size:9px;padding:1px 5px;border-radius:3px;">내 경로</div>':''}
+    </div>`;
+}
+function onViewImgLoad(holeNum){
+  const img=document.getElementById('vmimg_'+holeNum); if(!img)return;
+  const h=_findHole(holeNum); if(!h)return;
+  if(img.naturalWidth && img.naturalHeight){
+    const ar=img.naturalWidth/img.naturalHeight;
+    if(!h.mapAR || Math.abs(h.mapAR-ar)>0.01){ h.mapAR=ar; const box=document.getElementById('vmap_'+holeNum); if(box) box.outerHTML=holeMapView(h); }
+  }
+}
+function holeMapInner(h){
+  if(!h.map) return '<div style="background:#f0f0f0;color:#999;padding:20px;text-align:center;border-radius:6px;margin-bottom:8px;font-size:0.82em;">홀맵 없음 (코스 수정에서 등록)</div>';
+  const drawing = (drawModeHole===h.number);
+  const wp = Array.isArray(h.waypoints)?h.waypoints:[];  // [티, 핀, 방향1, 방향2, ...]
+  const clubs = (Array.isArray(current.planClubs[h.number])?current.planClubs[h.number]:[]).filter(c=>c && c!=='PT');
+  const tee = wp[0], pin = wp[1], dirs = wp.slice(2);
+  const { svg, dots } = _mapOverlay(h);
   let hint;
   if(!tee) hint='① 티 위치를 탭';
   else if(!pin) hint='② 핀 위치를 탭 (전장 기준)';
@@ -718,12 +745,41 @@ function holeMapInner(h){
       <svg viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;">${svg}</svg>
       <div style="position:absolute;inset:0;pointer-events:none;">${dots}</div>
     </div>
-    <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+    <div style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:4px;">
       <button class="btn ${drawing?'btn-success':'btn-secondary'}" style="padding:5px 10px;font-size:0.78em;margin:0;" onclick="toggleDraw(${h.number})">${drawing?'✓ 그리는 중 — 탭':'🖊️ 경로 그리기'}</button>
       <button class="btn btn-secondary" style="padding:5px 10px;font-size:0.78em;margin:0;" onclick="undoPoint(${h.number})">↶ 취소</button>
       <button class="btn btn-secondary" style="padding:5px 10px;font-size:0.78em;margin:0;" onclick="clearPath(${h.number})">초기화</button>
-      <span style="font-size:0.72em;color:#1e3c72;font-weight:600;">${drawing?hint:(tee&&pin?'초록=티 빨강=핀 주황=클럽 도달점(방향만 지정, 거리 자동)':'🖊️ 경로 그리기로 시작')}</span>
-    </div>`;
+      <button class="btn btn-primary" style="padding:5px 12px;font-size:0.8em;margin:0;font-weight:700;" onclick="savePathExplicit(${h.number})">💾 저장하기</button>
+    </div>
+    <div style="font-size:0.72em;color:#1e3c72;font-weight:600;margin-bottom:3px;">${drawing?hint:(tee&&pin?'초록=티 빨강=핀 주황=클럽 도달점(방향만 지정, 거리 자동)':'🖊️ 경로 그리기로 시작')}</div>
+    <div id="savemsg_${h.number}" style="font-size:0.74em;font-weight:700;margin-bottom:8px;min-height:1em;color:#2e7d32;">${(tee&&pin)?'✅ 이 홀 경로 있음 — 저장하기를 눌러 클라우드에 확정하세요':''}</div>`;
+}
+// 명시적 저장: 확실한 피드백 + 그려둔 홀 안내 (다음에 이어서 그릴 수 있게)
+async function savePathExplicit(holeNum){
+  const msg=document.getElementById('savemsg_'+holeNum);
+  if(msg){ msg.textContent='☁️ 저장 중...'; msg.style.color='#e65100'; }
+  const ok = await saveCourseToCloud(current.course);
+  const drawn = (current.course.holes||[]).filter(x=>Array.isArray(x.waypoints)&&x.waypoints.length>=2).map(x=>Number(x.number)).sort((a,b)=>a-b);
+  refreshPrepTabs();
+  if(ok!==false){
+    const list = drawn.length?drawn.join(', ')+'번':'없음';
+    const allNums = (current.course.holes||[]).map(x=>Number(x.number));
+    const next = allNums.filter(n=>!drawn.includes(n)).sort((a,b)=>a-b)[0];
+    const nextTxt = next?` · 다음엔 ${next}번부터 이어서 그리면 됩니다`:' · 모든 홀 완료!';
+    if(msg){ msg.textContent=`✅ 저장 완료! 그려둔 홀: ${list}${nextTxt}`; msg.style.color='#2e7d32'; }
+  } else {
+    if(msg){ msg.textContent='⚠️ 저장 실패 — 클라우드 연결을 확인하세요'; msg.style.color='#c62828'; }
+    alert('저장에 실패했습니다.\n인터넷 연결 또는 Supabase 상태를 확인하세요.\n(Supabase가 일시정지되면 대시보드에서 Restore 후 다시 저장)');
+  }
+}
+function refreshPrepTabs(){
+  const tabs=document.getElementById('prepHoleTabs'); if(!tabs||!current.course)return;
+  const hs=current.course.holes;
+  tabs.innerHTML = hs.map(h=>{
+    const hasPath = Array.isArray(h.waypoints)&&h.waypoints.length>=2;
+    const planned = Array.isArray(current.planClubs[h.number]) && current.planClubs[h.number].filter(s=>s).length>0;
+    return `<div class="hole-tab ${(hasPath||planned)?'done':''}" onclick="jumpHole('prepcard_',${h.number})">${h.number}H${hasPath?'✏️':''}</div>`;
+  }).join('');
 }
 function refreshHoleMap(holeNum){ const box=document.getElementById('hmbox_'+holeNum); if(!box)return; const h=_findHole(holeNum); if(h) box.innerHTML=holeMapInner(h); }
 function mapTap(evt, holeNum){
@@ -801,7 +857,7 @@ function renderPrep(){
   const plannedHoles = planStrokes.filter(x=>x>0).length;
   // 홀 네비 탭
   const tabs = document.getElementById('prepHoleTabs');
-  if(tabs) tabs.innerHTML = hs.map(h=>`<div class="hole-tab ${planStrokes[hs.indexOf(h)]>0?'done':''}" onclick="jumpHole('prepcard_',${h.number})">${h.number}H</div>`).join('');
+  if(tabs) tabs.innerHTML = hs.map(h=>{ const hasPath=Array.isArray(h.waypoints)&&h.waypoints.length>=2; return `<div class="hole-tab ${(planStrokes[hs.indexOf(h)]>0||hasPath)?'done':''}" onclick="jumpHole('prepcard_',${h.number})">${h.number}H${hasPath?'✏️':''}</div>`; }).join('');
   // 계획 총타수
   const totEl = document.getElementById('prepPlanTotal');
   if(totEl){
@@ -865,7 +921,7 @@ function holeInputCard(h){
     </div>` : '';
   return `<div class="hole-card" id="inputcard_${h.number}">
     <div class="hole-number">홀 ${h.number} (Par ${h.par}${h.dist?', '+h.dist+'m':''})</div>
-    ${h.map?`<img src="${h.map}" style="width:100%;border-radius:6px;margin-bottom:8px;">`:''}
+    ${holeMapView(h)}
     ${planBox}
     <div class="hole-input"><label>실제 친 클럽 (순서대로, 칸 자동 추가)</label>${clubSelects}</div>
     ${resultText?`<div style="background:#e8f5e9;color:#2e7d32;padding:6px 10px;border-radius:6px;font-weight:600;font-size:0.9em;text-align:center;margin-bottom:6px;">⛳ ${resultText}</div>`:''}
@@ -929,7 +985,7 @@ function holePostCard(h){
   let resultText = (putts>0&&onShots>0)?`${onShots}온 ${putts}퍼트`:(onShots>0?`${onShots}샷`:(putts>0?`${putts}퍼트`:''));
   return `<div class="hole-card">
     <div class="hole-number">홀 ${h.number} · 스코어 ${current.scores[h.number]||'-'}${resultText?' · '+resultText:''}</div>
-    ${h.map?`<img src="${h.map}" style="width:100%;border-radius:6px;margin-bottom:8px;">`:''}
+    ${holeMapView(h)}
     <div style="background:#fff9e6;padding:8px;border-radius:4px;margin-bottom:8px;font-size:0.82em;">📝 목표: ${current.goals[h.number]||'-'}</div>
     ${usedClubs?`<div style="background:#eef3ff;padding:8px;border-radius:4px;margin-bottom:8px;font-size:0.82em;">🏌️ 사용 클럽: ${usedClubs}</div>`:''}
     <div class="hole-input"><label>🎯 실제 사용 클럽 (추가 메모)</label><input type="text" value="${current.actualClubs[h.number]||''}" onchange="current.actualClubs[${h.number}]=this.value" placeholder="예: DR 160m → 5i"></div>
