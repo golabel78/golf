@@ -232,9 +232,22 @@ const SEED = [{"id":"1","name":"Solmoro CC","holes":[{"number":1,"par":4,"dist":
 let courses = [];
 let roundRecords = [];
 let courseSessions = []; // 코스별 라운드 세션 원본 (홀별 표용)
-let current = { course:null, goals:{}, scores:{}, clubs:{}, notes:{}, actualClubs:{}, postNotes:{}, planClubs:{} };
+let current = { course:null, goals:{}, scores:{}, clubs:{}, notes:{}, actualClubs:{}, postNotes:{}, planClubs:{}, misses:{} };
+const MISS_TAGS = ['정타','탑','땅/뒤땅','슬라이스','훅','푸시','풀','OB/해저드','쪼루','기타'];
+const MISS_ADVICE = {
+  '탑':'임팩트 때 상체 들림 주의 — 공을 끝까지 보고 체중 유지',
+  '땅/뒤땅':'공 뒤를 찍음 — 체중 왼발 쪽, 공 위치 살짝 뒤로',
+  '슬라이스':'페이스 열림 — 그립 점검, 팔로우 끝까지 돌려주기',
+  '훅':'페이스 닫힘/인아웃 과함 — 릴리즈 완화, 타깃 왼쪽 여유',
+  '푸시':'몸이 늦게 열림 — 하체 리드 먼저, 끝까지 회전',
+  '풀':'아웃인 궤도 — 테이크백 인사이드, 타깃 오른쪽 여유',
+  'OB/해저드':'방향 안정 클럽으로 한 클럽 낮춰 안전하게 공략',
+  '쪼루':'탑/뒤땅 복합 — 힘 빼고 리듬 위주 스윙',
+  '기타':'해당 클럽 컨디션 주의'
+};
 let editingCourseId = null;
 let editMaps = {};
+let editPhotos = {}; // 코스수정 중 홀별 사진(임시)
 let drawModeHole = null; // 홀맵 경로 그리기 모드
 const CLUB_DIST = {'DR':160,'3W':145,'HY':135,'5i':125,'6i':115,'7i':105,'8i':95,'9i':85,'PW':80,'48':70,'52':65,'56':60,'PT':0};
 
@@ -536,8 +549,8 @@ function renderHoleEditor(existing) {
   const defaults18 = [4,4,3,5,4,3,4,5,4,4,4,3,5,4,3,4,5,4];
   const defaults9 = [4,4,3,5,4,3,4,5,4];
   const defaults = count===9?defaults9:defaults18;
-  editMaps = {};
-  if(existing) existing.forEach((h,i)=>{ if(h.map) editMaps[i]=h.map; });
+  editMaps = {}; editPhotos = {};
+  if(existing) existing.forEach((h,i)=>{ if(h.map) editMaps[i]=h.map; if(Array.isArray(h.photos)&&h.photos.length) editPhotos[i]=h.photos.slice(); });
   let html='';
   for(let i=0;i<count;i++){
     const h = existing?existing[i]:null;
@@ -551,10 +564,41 @@ function renderHoleEditor(existing) {
         <label class="upbtn">📷 홀맵 올리기<input type="file" accept="image/*" style="display:none;" onchange="uploadMap(${i},this)"></label>
         <span id="map_preview_${i}">${editMaps[i]?`<img src="${editMaps[i]}"><span class="clearmap" onclick="clearMap(${i})">✕ 삭제</span>`:''}</span>
       </div>
+      <div class="map-upload-cell" style="margin-top:4px;">
+        <label class="upbtn">🖼️ 사진 추가<input type="file" accept="image/*" multiple style="display:none;" onchange="uploadPhoto(${i},this)"></label>
+        <span id="photos_preview_${i}" style="display:flex;gap:4px;flex-wrap:wrap;">${photoEditThumbs(i)}</span>
+      </div>
     </div>`;
   }
   document.getElementById('holeEditor').innerHTML = html;
 }
+function photoEditThumbs(i){
+  const arr = editPhotos[i]||[];
+  return arr.map((src,idx)=>`<span style="position:relative;display:inline-block;"><img src="${src}" style="height:42px;border-radius:4px;border:1px solid #dde;"><span class="clearmap" style="position:absolute;top:-6px;right:-6px;background:#c62828;color:#fff;border-radius:50%;width:16px;height:16px;line-height:16px;text-align:center;font-size:10px;cursor:pointer;" onclick="removePhoto(${i},${idx})">✕</span></span>`).join('');
+}
+function uploadPhoto(i,input){
+  const files=Array.from(input.files||[]); if(!files.length)return;
+  if(!Array.isArray(editPhotos[i])) editPhotos[i]=[];
+  let pending=files.length;
+  files.forEach(file=>{
+    const reader=new FileReader();
+    reader.onload=function(e){
+      const img=new Image();
+      img.onload=function(){
+        const maxW=800; const scale=Math.min(1,maxW/img.width);
+        const canvas=document.createElement('canvas');
+        canvas.width=img.width*scale; canvas.height=img.height*scale;
+        canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+        editPhotos[i].push(canvas.toDataURL('image/jpeg',0.6));
+        if(--pending===0){ const el=document.getElementById('photos_preview_'+i); if(el) el.innerHTML=photoEditThumbs(i); }
+      };
+      img.src=e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+  input.value='';
+}
+function removePhoto(i,idx){ if(Array.isArray(editPhotos[i])){ editPhotos[i].splice(idx,1); const el=document.getElementById('photos_preview_'+i); if(el) el.innerHTML=photoEditThumbs(i); } }
 function uploadMap(i,input){
   const file=input.files[0]; if(!file)return;
   const reader=new FileReader();
@@ -579,9 +623,19 @@ async function saveCourse() {
   const name=document.getElementById('newCourseName').value.trim();
   if(!name){ alert('코스명을 입력하세요'); return; }
   const count=parseInt(document.getElementById('newCourseHoleCount').value);
+  const prevHoles = editingCourseId ? (courses.find(x=>x.id===editingCourseId)?.holes||[]) : [];
   const holes=[];
   for(let i=0;i<count;i++){
-    holes.push({number:i+1, par:parseInt(document.getElementById('edit_par_'+i).value), dist:document.getElementById('edit_dist_'+i).value.trim(), map:editMaps[i]||''});
+    const old = prevHoles[i]||{};
+    holes.push({
+      number:i+1,
+      par:parseInt(document.getElementById('edit_par_'+i).value),
+      dist:document.getElementById('edit_dist_'+i).value.trim(),
+      map:editMaps[i]||'',
+      photos: Array.isArray(editPhotos[i])?editPhotos[i]:[],
+      waypoints: Array.isArray(old.waypoints)?old.waypoints:[],   // 경로 보존
+      mapAR: old.mapAR||undefined                                  // 비율 보존
+    });
   }
   let c;
   if(editingCourseId){ c=courses.find(x=>x.id===editingCourseId); c.name=name; c.holes=holes; }
@@ -592,7 +646,7 @@ async function saveCourse() {
 
 function startRound(id){
   const c=courses.find(x=>x.id===id); if(!c)return;
-  current={course:c, goals:{}, scores:{}, clubs:{}, notes:{}, actualClubs:{}, postNotes:{}, planClubs:{}};
+  current={course:c, goals:{}, scores:{}, clubs:{}, notes:{}, actualClubs:{}, postNotes:{}, planClubs:{}, misses:{}};
   document.getElementById('r_courseName').value=c.name;
   document.getElementById('r_date').valueAsDate=new Date();
   document.getElementById('r_front9').value=''; document.getElementById('r_back9').value=''; document.getElementById('r_greenspeed').value='';
@@ -708,6 +762,19 @@ function _mapOverlay(h){
     }
   }
   return { svg, dots, hasPath: !!(tee && dirs.length) };
+}
+// 홀별 사진 가로 갤러리 (옆으로 스와이프) — 탭하면 크게 보기
+function photoGallery(h){
+  const arr = Array.isArray(h.photos)?h.photos:[];
+  if(!arr.length) return '';
+  return `<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:8px;-webkit-overflow-scrolling:touch;scroll-snap-type:x mandatory;">
+    ${arr.map(src=>`<img src="${src}" onclick="openLightbox('${'IMG'}',this.src)" style="height:120px;border-radius:6px;flex:0 0 auto;scroll-snap-align:start;cursor:pointer;border:1px solid #dde;">`).join('')}
+  </div>`;
+}
+function openLightbox(_t,src){
+  let ov=document.getElementById('lightbox');
+  if(!ov){ ov=document.createElement('div'); ov.id='lightbox'; ov.onclick=function(){ov.style.display='none';}; ov.style.cssText='display:none;position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:9999;align-items:center;justify-content:center;'; ov.innerHTML='<img id="lightboxImg" style="max-width:96%;max-height:96%;border-radius:8px;">'; document.body.appendChild(ov); }
+  document.getElementById('lightboxImg').src=src; ov.style.display='flex';
 }
 // 라운드 중/후: 그린 경로를 읽기전용으로 표시 (그리기 버튼 없음)
 function holeMapView(h){
@@ -899,13 +966,21 @@ function holeInputCard(h){
   }
   const filledCount = shots.filter(s=>s).length;
   const showCount = Math.max(3, filledCount + 1);
+  const miss = Array.isArray(current.misses[h.number])?current.misses[h.number]:[];
   let clubSelects = '';
   for (let idx=0; idx<showCount; idx++){
+    const isPT = shots[idx]==='PT';
     clubSelects += `
-    <select onchange="setClub(${h.number},${idx},this.value)" style="margin-bottom:4px;">
-      <option value="">${idx+1}번째 샷</option>
-      ${CLUBS.map(c=>`<option value="${c}" ${shots[idx]===c?'selected':''}>${c==='PT'?'PT(퍼터)':c}</option>`).join('')}
-    </select>`;
+    <div style="display:flex;gap:5px;margin-bottom:4px;align-items:center;">
+      <select onchange="setClub(${h.number},${idx},this.value)" style="flex:1;margin:0;">
+        <option value="">${idx+1}번째 샷</option>
+        ${CLUBS.map(c=>`<option value="${c}" ${shots[idx]===c?'selected':''}>${c==='PT'?'PT(퍼터)':c}</option>`).join('')}
+      </select>
+      <select onchange="setMiss(${h.number},${idx},this.value)" style="flex:0 0 108px;margin:0;${(!shots[idx]||isPT)?'opacity:0.45;':''}" ${(!shots[idx]||isPT)?'disabled':''}>
+        <option value="">결과</option>
+        ${MISS_TAGS.map(t=>`<option value="${t}" ${miss[idx]===t?'selected':''}>${t}</option>`).join('')}
+      </select>
+    </div>`;
   }
   // 라운드 전 계획(내가 고른 클럽) + 추천 공략 + 거리 표시
   const strategy = suggestStrategy(h.dist, h.par);
@@ -921,11 +996,106 @@ function holeInputCard(h){
   return `<div class="hole-card" id="inputcard_${h.number}">
     <div class="hole-number">홀 ${h.number} (Par ${h.par}${h.dist?', '+h.dist+'m':''})</div>
     ${holeMapView(h)}
+    ${photoGallery(h)}
+    ${pastHoleAnalysis(h)}
     ${planBox}
-    <div class="hole-input"><label>실제 친 클럽 (순서대로, 칸 자동 추가)</label>${clubSelects}</div>
+    <div class="hole-input"><label>실제 친 클럽 + 결과 (순서대로, 칸 자동 추가)</label>${clubSelects}</div>
     ${resultText?`<div style="background:#e8f5e9;color:#2e7d32;padding:6px 10px;border-radius:6px;font-weight:600;font-size:0.9em;text-align:center;margin-bottom:6px;">⛳ ${resultText}</div>`:''}
     ${scoreLabel?`<div style="background:#2a5298;color:#fff;padding:8px 10px;border-radius:6px;font-weight:700;font-size:1em;text-align:center;margin-bottom:8px;">${scoreLabel}</div>`:''}
+    ${shotCompare(h)}
+    ${nextHoleAdvice(h)}
     <div class="hole-input"><label>전략·메모</label><input type="text" value="${current.notes[h.number]||''}" onchange="current.notes[${h.number}]=this.value" placeholder="샷·전략 코멘트"></div>
+  </div>`;
+}
+function setMiss(holeNum, idx, val){
+  if(!Array.isArray(current.misses[holeNum])) current.misses[holeNum]=[];
+  current.misses[holeNum][idx]=val;
+  renderInput();
+}
+// ===== 계획 vs 실제 비교 + 미스 감지 =====
+function shotCompare(h){
+  const plan = (Array.isArray(current.planClubs[h.number])?current.planClubs[h.number]:[]).filter(s=>s);
+  const act = (Array.isArray(current.clubs[h.number])?current.clubs[h.number]:[]).filter(s=>s);
+  const miss = Array.isArray(current.misses[h.number])?current.misses[h.number]:[];
+  if(!act.length) return '';
+  // 샷별 라인: 계획 vs 실제 + 결과 태그
+  let rows='';
+  const n=Math.max(plan.length, act.length);
+  for(let i=0;i<n;i++){
+    const p=plan[i]||'-', a=act[i]||'-', m=miss[i]||'';
+    const diff = (p!=='-'&&a!=='-'&&p!==a);
+    const mTag = (m&&m!=='정타')?`<span style="color:#c62828;font-weight:700;">⚠ ${m}</span>`:(m==='정타'?'<span style="color:#2e7d32;">정타</span>':'');
+    rows += `<div style="display:flex;gap:6px;font-size:0.78em;padding:1px 0;">
+      <span style="flex:0 0 42px;color:#888;">샷${i+1}</span>
+      <span style="flex:1;">계획 <b>${p}</b> → 실제 <b style="color:${diff?'#e65100':'#1e3c72'};">${a}</b></span>
+      <span style="flex:0 0 90px;text-align:right;">${mTag}</span>
+    </div>`;
+  }
+  // 계획 대비 타수
+  const planN=plan.length, actN=act.length;
+  let summary='';
+  if(planN){ const d=actN-planN; summary = d>0?`계획보다 +${d}타`:(d<0?`계획보다 ${d}타(굿)`:'계획대로'); }
+  const misses = miss.map((m,i)=>({m,club:act[i]})).filter(x=>x.m&&x.m!=='정타');
+  return `<div style="background:#fff8f0;border:1px solid #ffe0b2;border-radius:6px;padding:8px 10px;margin-bottom:8px;">
+    <div style="font-size:0.8em;font-weight:700;color:#e65100;margin-bottom:4px;">📊 계획 vs 실제 ${summary?`· ${summary}`:''}</div>
+    ${rows}
+    ${misses.length?`<div style="font-size:0.76em;color:#c62828;margin-top:4px;border-top:1px dashed #ffcc80;padding-top:4px;">미스 ${misses.length}개: ${misses.map(x=>`${x.club||'?'} ${x.m}`).join(', ')}</div>`:''}
+  </div>`;
+}
+// ===== 이번 라운드 미스 누적 → 다음 홀 조언 =====
+function nextHoleAdvice(h){
+  const act = (Array.isArray(current.clubs[h.number])?current.clubs[h.number]:[]).filter(s=>s);
+  if(!act.length) return '';   // 이 홀을 쳐야 다음 홀 조언이 뜸
+  // 이번 라운드 전체 미스 집계 (클럽별 미스유형)
+  const tally={};  // club -> {type:count}
+  current.course.holes.forEach(hh=>{
+    const a=(Array.isArray(current.clubs[hh.number])?current.clubs[hh.number]:[]).filter(s=>s);
+    const m=Array.isArray(current.misses[hh.number])?current.misses[hh.number]:[];
+    a.forEach((c,i)=>{ const t=m[i]; if(t&&t!=='정타'){ tally[c]=tally[c]||{}; tally[c][t]=(tally[c][t]||0)+1; } });
+  });
+  // 다음 홀 찾기
+  const holesArr=current.course.holes;
+  const idx=holesArr.findIndex(x=>Number(x.number)===Number(h.number));
+  const next = idx>=0?holesArr[idx+1]:null;
+  if(!next) return `<div style="background:#e8f5e9;border-left:3px solid #2e7d32;padding:8px 10px;border-radius:6px;font-size:0.8em;color:#1b5e20;margin-bottom:8px;">🏁 마지막 홀! 수고했어요.</div>`;
+  const nextPlan=(Array.isArray(current.planClubs[next.number])?current.planClubs[next.number]:[]).filter(s=>s&&s!=='PT');
+  // 다음 홀 계획 클럽 중 이번 라운드 미스 있던 클럽 경고
+  let warns=[];
+  nextPlan.forEach(c=>{
+    if(tally[c]){ const types=Object.entries(tally[c]).sort((a,b)=>b[1]-a[1]); const [tp,cnt]=types[0]; warns.push(`<b>${c}</b> 이번 라운드 ${tp} ${cnt}회 → ${MISS_ADVICE[tp]||'주의'}`); }
+  });
+  // 전체 최다 미스 유형(일반 팁)
+  const allTypes={}; Object.values(tally).forEach(o=>Object.entries(o).forEach(([t,c])=>allTypes[t]=(allTypes[t]||0)+c));
+  const topType=Object.entries(allTypes).sort((a,b)=>b[1]-a[1])[0];
+  let body='';
+  if(warns.length){ body = warns.map(w=>`<div style="margin-bottom:3px;">⚠ ${w}</div>`).join(''); }
+  else if(topType){ body = `<div>오늘 ${topType[0]} ${topType[1]}회 — ${MISS_ADVICE[topType[0]]||''}</div>`; }
+  else { body = `<div>이번 홀 깔끔! 다음 홀도 리듬 유지 👍</div>`; }
+  const nStrat = suggestStrategy(next.dist, next.par);
+  return `<div style="background:#eef3ff;border-left:3px solid #2a5298;padding:9px 11px;border-radius:6px;font-size:0.8em;color:#1e3c72;margin-bottom:8px;">
+    <div style="font-weight:700;margin-bottom:4px;">➡️ 다음 ${next.number}번 홀 (Par ${next.par}${next.dist?', '+next.dist+'m':''}) 조언</div>
+    ${body}
+    ${nStrat?`<div style="margin-top:4px;color:#555;">🎯 ${nStrat}</div>`:''}
+  </div>`;
+}
+// ===== 라운드 전: 이 홀 과거 성적/미스 패턴 =====
+function pastHoleAnalysis(h){
+  const cid=current.course.id;
+  const past=(roundRecords||[]).filter(r=>String(r.course_id)===String(cid) && r.holes && r.holes[h.number]);
+  if(!past.length) return '';
+  const recs=past.map(r=>r.holes[h.number]);
+  const scores=recs.map(x=>parseInt(x.score)).filter(n=>!isNaN(n));
+  if(!scores.length) return '';
+  const avg=(scores.reduce((s,v)=>s+v,0)/scores.length);
+  const diff=avg-h.par;
+  // 클럽별 미스 집계
+  const tally={};
+  recs.forEach(x=>{ const a=x.actual||[], m=x.misses||[]; a.forEach((c,i)=>{ const t=m[i]; if(t&&t!=='정타'){ tally[c]=tally[c]||{}; tally[c][t]=(tally[c][t]||0)+1; } }); });
+  const warnList=Object.entries(tally).map(([c,o])=>{ const [tp,cnt]=Object.entries(o).sort((a,b)=>b[1]-a[1])[0]; return `${c} ${tp} ${cnt}회`; });
+  return `<div style="background:#f3e5f5;border-left:3px solid #8e24aa;padding:8px 10px;border-radius:6px;font-size:0.8em;color:#4a148c;margin-bottom:8px;">
+    <div style="font-weight:700;margin-bottom:3px;">📈 이 홀 과거 ${scores.length}라운드</div>
+    <div>평균 <b>${avg.toFixed(1)}타</b> (파 대비 ${diff>0?'+':''}${diff.toFixed(1)})</div>
+    ${warnList.length?`<div style="margin-top:3px;color:#c62828;">⚠ 주의: ${warnList.join(', ')}</div>`:''}
   </div>`;
 }
 function setClub(holeNum, idx, val){
@@ -985,6 +1155,8 @@ function holePostCard(h){
   return `<div class="hole-card">
     <div class="hole-number">홀 ${h.number} · 스코어 ${current.scores[h.number]||'-'}${resultText?' · '+resultText:''}</div>
     ${holeMapView(h)}
+    ${photoGallery(h)}
+    ${shotCompare(h)}
     <div style="background:#fff9e6;padding:8px;border-radius:4px;margin-bottom:8px;font-size:0.82em;">📝 목표: ${current.goals[h.number]||'-'}</div>
     ${usedClubs?`<div style="background:#eef3ff;padding:8px;border-radius:4px;margin-bottom:8px;font-size:0.82em;">🏌️ 사용 클럽: ${usedClubs}</div>`:''}
     <div class="hole-input"><label>🎯 실제 사용 클럽 (추가 메모)</label><input type="text" value="${current.actualClubs[h.number]||''}" onchange="current.actualClubs[${h.number}]=this.value" placeholder="예: DR 160m → 5i"></div>
@@ -1015,13 +1187,28 @@ async function goExport(){
       if (shots.length>0){ played=true; totalStrokes+=shots.length; }
     });
     if (played) {
+      // 홀별 상세(계획/실제/미스) 저장 → 다음 라운드 분석·조언에 사용
+      const holesDetail={};
+      current.course.holes.forEach(h=>{
+        const act=(Array.isArray(current.clubs[h.number])?current.clubs[h.number]:[]).filter(s=>s);
+        if(!act.length) return;
+        holesDetail[h.number]={
+          score: current.scores[h.number]||act.length,
+          par: h.par,
+          plan: (Array.isArray(current.planClubs[h.number])?current.planClubs[h.number]:[]).filter(s=>s),
+          actual: act,
+          misses: (Array.isArray(current.misses[h.number])?current.misses[h.number]:[]).slice(0,act.length),
+          notes: current.notes[h.number]||''
+        };
+      });
+      const dateVal=document.getElementById('r_date').value;
       const rec = {
         id: 'r'+Date.now(),
         course_id: current.course.id,
-        data: { date: document.getElementById('r_date').value, total: totalStrokes }
+        data: { date: dateVal, total: totalStrokes, holes: holesDetail }
       };
       await sb.from('rounds').upsert(rec);
-      roundRecords.push({ id:rec.id, course_id:current.course.id, date:rec.data.date, total:totalStrokes });
+      roundRecords.push({ id:rec.id, course_id:current.course.id, date:dateVal, total:totalStrokes, holes:holesDetail });
     }
   } catch(e) {}
   show('exportView');
