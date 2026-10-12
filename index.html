@@ -634,7 +634,9 @@ async function saveCourse() {
       map:editMaps[i]||'',
       photos: Array.isArray(editPhotos[i])?editPhotos[i]:[],
       waypoints: Array.isArray(old.waypoints)?old.waypoints:[],   // 경로 보존
-      mapAR: old.mapAR||undefined                                  // 비율 보존
+      mapAR: old.mapAR||undefined,                                 // 비율 보존
+      planClubs: Array.isArray(old.planClubs)?old.planClubs:[],    // 계획 클럽 보존
+      planMemo: old.planMemo||''                                   // 계획 메모 보존
     });
   }
   let c;
@@ -647,6 +649,11 @@ async function saveCourse() {
 function startRound(id){
   const c=courses.find(x=>x.id===id); if(!c)return;
   current={course:c, goals:{}, scores:{}, clubs:{}, notes:{}, actualClubs:{}, postNotes:{}, planClubs:{}, misses:{}};
+  // 코스에 저장된 계획(클럽/메모) 복원 → 라운드 준비 때 세운 계획이 라운드 중에도 보임
+  c.holes.forEach(h=>{
+    if(Array.isArray(h.planClubs)&&h.planClubs.length) current.planClubs[h.number]=h.planClubs.slice();
+    if(h.planMemo) current.goals[h.number]=h.planMemo;
+  });
   document.getElementById('r_courseName').value=c.name;
   document.getElementById('r_date').valueAsDate=new Date();
   document.getElementById('r_front9').value=''; document.getElementById('r_back9').value=''; document.getElementById('r_greenspeed').value='';
@@ -824,6 +831,7 @@ function holeMapInner(h){
 async function savePathExplicit(holeNum){
   const msg=document.getElementById('savemsg_'+holeNum);
   if(msg){ msg.textContent='☁️ 저장 중...'; msg.style.color='#e65100'; }
+  _syncPlanToHoles();   // 계획 클럽/메모도 함께 저장
   const ok = await saveCourseToCloud(current.course);
   const drawn = (current.course.holes||[]).filter(x=>Array.isArray(x.waypoints)&&x.waypoints.length>=2).map(x=>Number(x.number)).sort((a,b)=>a-b);
   refreshPrepTabs();
@@ -942,7 +950,21 @@ function setPlanClub(holeNum, idx, val){
   }
   renderPrep();
 }
-function goInput(){ current.front9=document.getElementById('r_front9').value; current.back9=document.getElementById('r_back9').value; renderInput(); show('inputView'); }
+// 계획(클럽/메모)을 홀에 반영 → 코스에 저장하면 다음에 열어도 유지
+function _syncPlanToHoles(){
+  if(!current.course) return;
+  current.course.holes.forEach(h=>{
+    const p=current.planClubs[h.number]; h.planClubs=Array.isArray(p)?p.filter(s=>s):[];
+    const m=current.goals[h.number]; h.planMemo=m||'';
+  });
+}
+function goInput(){
+  current.front9=document.getElementById('r_front9').value;
+  current.back9=document.getElementById('r_back9').value;
+  _syncPlanToHoles();
+  saveCourseToCloud(current.course);   // 계획을 클라우드에 저장 (라운드 중에도 유지)
+  renderInput(); show('inputView');
+}
 function holeInputCard(h){
   let shots = current.clubs[h.number] || [];
   if (!Array.isArray(shots)) shots = [];
