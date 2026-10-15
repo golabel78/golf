@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>프리스틴밸리 가평 추가</title>
+<style>
+  body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo',sans-serif;background:#f0f4f8;margin:0;padding:20px;color:#1e3c72;}
+  .box{max-width:520px;margin:0 auto;background:#fff;border-radius:12px;padding:20px;box-shadow:0 2px 12px rgba(0,0,0,.08);}
+  h1{font-size:1.2em;margin:0 0 6px;}
+  p{font-size:0.88em;color:#555;line-height:1.5;}
+  button{width:100%;padding:14px;font-size:1.05em;font-weight:700;border:none;border-radius:8px;background:#2a5298;color:#fff;margin-top:12px;cursor:pointer;}
+  button:disabled{opacity:.5;}
+  #log{margin-top:16px;font-size:0.85em;white-space:pre-wrap;background:#f7f9fc;border-radius:8px;padding:12px;min-height:40px;line-height:1.6;}
+  .ok{color:#2e7d32;font-weight:700;} .err{color:#c62828;font-weight:700;}
+  ul{font-size:0.82em;color:#444;padding-left:18px;line-height:1.6;}
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>⛳ 프리스틴밸리 가평 가져오기</h1>
+  <p>아래 버튼을 누르면 <b>프리스틴밸리 가평</b> 코스(레드티 거리·파)와 <b>작년 2025.09.28 라운드(93타)</b>, 그리고 7개 위험홀 공략 메모가 골프 앱에 들어갑니다.</p>
+  <ul>
+    <li>위험홀 메모: V4·V5·V6·V9 / P2·P4·P6</li>
+    <li>여러 번 눌러도 중복 안 됨(덮어쓰기)</li>
+    <li>끝나면 골프 앱 새로고침 → 대시보드에 코스 생김</li>
+  </ul>
+  <button id="go">프리스틴밸리 가평 추가하기</button>
+  <div id="log">대기 중…</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPABASE_URL = 'https://okscfgttlckufpzfqwcs.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_cgJc4XV1iHQlUvxNR7iysQ_Q-5wSmev';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const logEl = document.getElementById('log');
+function log(msg,cls){ logEl.innerHTML += (cls?`<span class="${cls}">${msg}</span>`:msg)+'\n'; }
+
+// ===== 프리스틴밸리 가평 (레드티 기준) =====
+// number, par, dist(레드 m), planClubs, planMemo
+const H = [
+  [1 ,5,'421',['DR','HY','5i','PT','PT'],'⚠️ 롱파5·첫홀(421m). 몸 안 풀렸으니 무리 금지 → 보기 플랜. 티샷 안전 최우선.'],
+  [2 ,3,'101',[],''],
+  [3 ,4,'280',[],''],
+  [4 ,4,'282',['DR','5i','PT','PT'],'작년 더블. 중파4 — 보기 목표로 안전하게.'],
+  [5 ,5,'397',['DR','3W','8i','PT','PT'],'⚠️ 작년 더블(7). 롱파5 — 3온2퍼트 보기 플랜, 세컨 욕심 금지.'],
+  [6 ,4,'248',['DR','PW','PT','PT'],'⭐ 숏파4(248m)! 작년 더블로 아까웠음. 거리 부담 없음 → 무조건 파 세이브.'],
+  [7 ,4,'287',[],''],
+  [8 ,3,'130',[],''],
+  [9 ,4,'302',['DR','HY','PT','PT'],'작년 더블. 롱파4 — 보기만 해도 성공.'],
+  [10,5,'411',[],'롱파5(411m). 3온 보기 플랜으로.'],
+  [11,4,'304',['DR','HY','PT','PT'],'⚠️ 최악홀! 작년 트리플(7). 롱파4 — 티샷 OB만 피하고 "더블만 면하자".'],
+  [12,3,'136',[],''],
+  [13,4,'251',['DR','8i','PT','PT'],'작년 더블. 중파4 — 파/보기 노림.'],
+  [14,5,'409',[],'롱파5(409m). 보기 플랜.'],
+  [15,3,'114',['6i','PT','PT'],'⭐ 숏파3(114m)! 작년 더블로 아까웠음. 핀 보고 파 세이브.'],
+  [16,4,'297',[],''],
+  [17,4,'240',[],'숏파4(240m). 파 노림 홀.'],
+  [18,4,'297',[],'']
+];
+const COURSE = {
+  id: 'c_pristine_gapyeong',
+  name: '프리스틴밸리 가평',
+  holes: H.map(h=>({ number:h[0], par:h[1], dist:h[2], map:'', photos:[], waypoints:[], planClubs:h[3], planMemo:h[4] }))
+};
+
+// ===== 작년 2025.09.28 라운드 (93타) =====
+// 홀별 실제 스코어(gross) — 카드에서 추출
+const SCORES = [5,3,5,6,7,6,5,3,6, 6,7,4,6,6,5,4,5,4];
+const holesDetail = {};
+H.forEach((h,i)=>{ holesDetail[h[0]] = { score:SCORES[i], par:h[1], plan:[], actual:[], misses:[], notes:'' }; });
+const ROUND = {
+  id: 'r_pristine_20250928',
+  course_id: 'c_pristine_gapyeong',
+  data: { date:'2025-09-28', total:93, holes:holesDetail }
+};
+
+document.getElementById('go').onclick = async function(){
+  this.disabled = true; logEl.innerHTML='';
+  try{
+    log('☁️ 코스 저장 중…');
+    let r1 = await sb.from('courses').upsert({ id:COURSE.id, name:COURSE.name, holes:COURSE.holes });
+    if(r1.error) throw new Error('코스 저장 실패: '+r1.error.message);
+    log('✅ 코스 "프리스틴밸리 가평" 저장 완료','ok');
+    log('☁️ 작년 라운드 저장 중…');
+    let r2 = await sb.from('rounds').upsert(ROUND);
+    if(r2.error) throw new Error('라운드 저장 실패: '+r2.error.message);
+    log('✅ 작년 93타 라운드 저장 완료','ok');
+    log('\n🎉 완료! 골프 앱을 새로고침하면 대시보드에 "프리스틴밸리 가평"이 보여요.\n라운드 시작 → 준비 화면/라운드 중에 위험홀 메모와 계획이 뜹니다.','ok');
+  }catch(e){
+    log('\n'+(e.message||e),'err');
+    log('인터넷/Supabase 연결을 확인하고 다시 눌러주세요.');
+    this.disabled = false;
+  }
+};
+</script>
+</body>
+</html>
