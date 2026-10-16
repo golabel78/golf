@@ -142,7 +142,7 @@ body { font-family:'Noto Sans KR',-apple-system,sans-serif; background:linear-gr
 <div id="prepView" class="view">
   <span class="back-btn" onclick="show('dashboardView')">← 대시보드</span>
   <div class="card">
-    <h2 class="section-title">📋 라운드 준비</h2>
+    <h2 class="section-title">📋 라운드 준비 <button class="btn btn-secondary" style="padding:4px 10px;font-size:0.72em;margin:0;float:right;" onclick="openClubSettings()">⚙️ 내 클럽</button></h2>
     <div class="input-group">
       <div class="input-field"><label>코스명</label><input type="text" id="r_courseName" readonly style="background:#f0f0f0;"></div>
       <div class="input-field"><label>날짜</label><input type="date" id="r_date"></div>
@@ -154,6 +154,7 @@ body { font-family:'Noto Sans KR',-apple-system,sans-serif; background:linear-gr
       <div class="input-field"><label>후반구 코스명</label><input type="text" id="r_back9" placeholder="예: 힐코스"></div>
       <div class="input-field"><label>그린스피드</label><input type="text" id="r_greenspeed" placeholder="예: 14.5"></div>
     </div>
+    <div id="prepKeyHoles"></div>
     <h3 style="color:#1e3c72; margin:18px 0 12px;">🎯 각 홀 목표</h3>
     <div class="hole-tabs" id="prepHoleTabs"></div>
     <div class="hole-grid" id="prepGrid"></div>
@@ -171,6 +172,7 @@ body { font-family:'Noto Sans KR',-apple-system,sans-serif; background:linear-gr
       <div class="score-box"><div class="score-number" id="liveTotal">-</div><div class="score-label">합계 (par 대비)</div></div>
       <div class="score-box"><div class="score-number" id="liveVsPar">-</div><div class="score-label">총 스코어</div></div>
     </div>
+    <div id="inputKeyHoles"></div>
     <div class="hole-tabs" id="inputHoleTabs"></div>
     <div id="inputGrid"></div>
     <div class="button-group"><button class="btn btn-success" onclick="goPost()">✓ 라운드 완료</button></div>
@@ -659,50 +661,108 @@ function startRound(id){
   document.getElementById('r_front9').value=''; document.getElementById('r_back9').value=''; document.getElementById('r_greenspeed').value='';
   renderPrep(); show('prepView');
 }
-// 내 클럽 거리 (RED 티 기준, total 거리 m)
-const MY_CLUBS = [
-  {name:'DR', dist:160},
-  {name:'3W', dist:145},
-  {name:'HY', dist:135},
-  {name:'5i', dist:125},
-  {name:'6i', dist:115},
-  {name:'7i', dist:105},
-  {name:'8i', dist:95},
-  {name:'9i', dist:85},
-  {name:'PW', dist:80},
-  {name:'48°', dist:70},
-  {name:'56°', dist:50}
+// ===== 내 클럽 설정 (신뢰 여부 + 거리). localStorage에 저장, 셀프 업데이트 가능 =====
+// on:true = 신뢰(추천에 사용) / false = 연습중(제외). 거리 수정 가능.
+const DEFAULT_BAG = [
+  {name:'DR', dist:160, on:true},
+  {name:'3W', dist:145, on:false},
+  {name:'HY', dist:135, on:false},
+  {name:'5i', dist:125, on:true},
+  {name:'6i', dist:115, on:true},
+  {name:'7i', dist:105, on:true},
+  {name:'8i', dist:95,  on:true},
+  {name:'9i', dist:85,  on:true},
+  {name:'PW', dist:80,  on:true},
+  {name:'52', dist:65,  on:true},
+  {name:'56', dist:60,  on:true}
 ];
+let MY_BAG = loadBag();
+function loadBag(){
+  try{ const s=localStorage.getItem('myBag'); if(s){ const b=JSON.parse(s); if(Array.isArray(b)&&b.length) return b; } }catch(e){}
+  return DEFAULT_BAG.map(c=>({...c}));
+}
+function saveBag(){ try{ localStorage.setItem('myBag', JSON.stringify(MY_BAG)); }catch(e){} }
+function bagSorted(){ return [...MY_BAG].sort((a,b)=>b.dist-a.dist); }
+function reliableClubs(){ return bagSorted().filter(c=>c.on); }           // 거리 내림차순
+function fairwayClubs(){ return reliableClubs().filter(c=>c.name!=='DR'); } // 페어웨이(드라이버 제외)
 
-// 홀 거리에 맞춰 공략 추천 (그린까지 남은 거리를 줄여나감)
+// 홀 거리에 맞춰 공략 추천 — "신뢰 클럽"만 사용 (티샷=최장 신뢰클럽, 그 외 드라이버 제외)
 function suggestStrategy(holeDist, par){
   let remain = parseInt(holeDist);
   if (!remain || remain<=0) return '';
+  const on = reliableClubs();
+  const fw = fairwayClubs();
+  if(!on.length) return '';
+  const shortest = on[on.length-1].dist;         // 최단 신뢰클럽 거리
+  const tee = on[0];                              // 최장 신뢰클럽 = 티샷
   const plan = [];
-  let guard = 0;
-  while (remain > 0 && guard < 8) {
+  let first = true, guard = 0;
+  while (remain > 0 && guard < 12) {
     guard++;
-    if (remain <= 60) {
-      // 그린 근처: 가장 가까운 웨지/퍼터
-      if (remain <= 10) { plan.push('PT(퍼팅)'); break; }
-      // 56도(40~60), 48도(70) 중 적당한 것
-      let wedge = MY_CLUBS.find(c=>c.dist>=remain) || MY_CLUBS[MY_CLUBS.length-1];
-      plan.push(`${wedge.name}(${remain}m)`);
-      plan.push('PT(퍼팅)');
-      break;
+    if (remain <= 10) { plan.push('PT(퍼팅)'); break; }
+    if (remain <= Math.max(shortest, 65)) {
+      // 그린 근처: 남은 거리를 덮는 가장 짧은 신뢰 웨지
+      let pool = fw.length?fw:on;
+      let w = [...pool].reverse().find(c=>c.dist>=remain) || pool[pool.length-1];
+      plan.push(`${w.name}(${remain}m)`); plan.push('PT(퍼팅)'); break;
     }
-    // 남은 거리에 가장 가까운(넘지 않는 쪽 우선) 클럽
-    let club = null;
-    for (let i=0;i<MY_CLUBS.length;i++){
-      if (MY_CLUBS[i].dist <= remain) { club = MY_CLUBS[i]; break; }
+    let club;
+    if (first && par>3 && remain>=150) {
+      club = tee;                                 // 티샷 = 최장 신뢰클럽
+    } else {
+      let pool = fw.length?fw:on;
+      club = pool.find(c=>c.dist<=remain) || pool[pool.length-1];
     }
-    if (!club) club = MY_CLUBS[MY_CLUBS.length-1];
     plan.push(`${club.name}(${club.dist}m)`);
     remain -= club.dist;
     if (remain < 0) remain = 0;
+    first = false;
   }
+  // 그린 도달했는데 퍼팅이 안 붙은 경우 보완
+  if (plan.length && plan[plan.length-1].indexOf('PT')===-1) plan.push('PT(퍼팅)');
   return plan.join(' → ');
 }
+
+// ===== 주의홀 표시 (메모의 ⚠️/⭐ 이모지로 자동 분류) =====
+function holeTag(h){ const m=(h&&h.planMemo)||''; if(m.indexOf('⭐')>=0) return 'chance'; if(m.indexOf('⚠')>=0) return 'caution'; return ''; }
+function tabTagMark(h){ const t=holeTag(h); return t==='caution'?'🚩':(t==='chance'?'🎯':''); }
+function tabTagStyle(h){ const t=holeTag(h); return t==='caution'?'box-shadow:inset 0 0 0 2px #c62828;':(t==='chance'?'box-shadow:inset 0 0 0 2px #2e7d32;':''); }
+function holeBadge(h){
+  const t=holeTag(h);
+  if(t==='caution') return '<div style="background:#ffebee;color:#c62828;border:1px solid #ffcdd2;border-radius:6px;padding:5px 10px;font-size:0.82em;font-weight:700;text-align:center;margin-bottom:8px;">🔴 주의 — 보기 플랜 (더블만 피하자)</div>';
+  if(t==='chance') return '<div style="background:#e8f5e9;color:#2e7d32;border:1px solid #c8e6c9;border-radius:6px;padding:5px 10px;font-size:0.82em;font-weight:700;text-align:center;margin-bottom:8px;">🟢 파 찬스 — 집중해서 세이브</div>';
+  return '';
+}
+// 오늘의 핵심 요약 (주의홀·찬스홀 목록)
+function keyHolesSummary(){
+  if(!current.course) return '';
+  const caution=[], chance=[];
+  current.course.holes.forEach(h=>{ const t=holeTag(h); if(t==='caution') caution.push(h.number); else if(t==='chance') chance.push(h.number); });
+  if(!caution.length && !chance.length) return '';
+  return `<div style="background:#f7f9fc;border:1px solid #e3e8f0;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:0.82em;line-height:1.6;">
+    <div style="font-weight:700;color:#1e3c72;margin-bottom:4px;">📌 오늘의 핵심</div>
+    ${caution.length?`<div><span style="color:#c62828;font-weight:700;">🚩 주의(보기 플랜):</span> ${caution.join(', ')}번</div>`:''}
+    ${chance.length?`<div><span style="color:#2e7d32;font-weight:700;">🎯 파 찬스:</span> ${chance.join(', ')}번</div>`:''}
+  </div>`;
+}
+
+// ===== 내 클럽 설정 모달 =====
+function openClubSettings(){ renderClubSettings(); document.getElementById('clubModal').style.display='flex'; }
+function closeClubSettings(){ document.getElementById('clubModal').style.display='none'; }
+function renderClubSettings(){
+  const body=document.getElementById('clubModalBody');
+  body.innerHTML = MY_BAG.map((c,i)=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #eef2f8;">
+      <label style="flex:0 0 auto;display:flex;align-items:center;gap:6px;cursor:pointer;">
+        <input type="checkbox" ${c.on?'checked':''} onchange="toggleClub(${i},this.checked)" style="width:18px;height:18px;">
+        <span style="font-weight:700;width:34px;">${c.name}</span>
+      </label>
+      <input type="number" value="${c.dist}" onchange="setClubDist(${i},this.value)" style="width:70px;padding:5px;border:1px solid #cdd6e5;border-radius:6px;text-align:right;"> <span style="font-size:0.85em;color:#888;">m</span>
+      <span style="margin-left:auto;font-size:0.78em;font-weight:700;color:${c.on?'#2e7d32':'#bbb'};">${c.on?'신뢰':'연습중'}</span>
+    </div>`).join('');
+}
+function toggleClub(i,on){ MY_BAG[i].on=on; saveBag(); renderClubSettings(); if(current.course && document.getElementById('prepView').classList.contains('active')) renderPrep(); }
+function setClubDist(i,v){ const n=parseInt(v)||0; MY_BAG[i].dist=n; saveBag(); if(current.course && document.getElementById('prepView').classList.contains('active')) renderPrep(); }
 
 // ===== 홀맵 경로 그리기 (라운드 전 계획) : 코스에 영구 저장 =====
 function _findHole(holeNum){ return current.course.holes.find(x=>Number(x.number)===Number(holeNum)); }
@@ -852,7 +912,7 @@ function refreshPrepTabs(){
   tabs.innerHTML = hs.map(h=>{
     const hasPath = Array.isArray(h.waypoints)&&h.waypoints.length>=2;
     const planned = Array.isArray(current.planClubs[h.number]) && current.planClubs[h.number].filter(s=>s).length>0;
-    return `<div class="hole-tab ${(hasPath||planned)?'done':''}" onclick="jumpHole('prepcard_',${h.number})">${h.number}H${hasPath?'✏️':''}</div>`;
+    return `<div class="hole-tab ${(hasPath||planned)?'done':''}" style="${tabTagStyle(h)}" onclick="jumpHole('prepcard_',${h.number})">${h.number}H${tabTagMark(h)}${hasPath?'✏️':''}</div>`;
   }).join('');
 }
 function refreshHoleMap(holeNum){ const box=document.getElementById('hmbox_'+holeNum); if(!box)return; const h=_findHole(holeNum); if(h) box.innerHTML=holeMapInner(h); }
@@ -919,6 +979,7 @@ function renderPrep(){
     return `
     <div class="hole-card" id="prepcard_${h.number}">
       <div class="hole-number">홀 ${h.number} (Par ${h.par}${h.dist?', '+h.dist+'m':''})</div>
+      ${holeBadge(h)}
       <div id="hmbox_${h.number}">${holeMapInner(h)}</div>
       ${strategy?`<div style="background:#e8f0ff;color:#1e3c72;padding:8px 10px;border-radius:6px;font-size:0.82em;margin-bottom:8px;"><b>🎯 추천 공략:</b><br>${strategy}</div>`:''}
       <div class="hole-input"><label>🏌️ 나의 계획 클럽 (드롭다운, 칸 자동 추가)</label>${planSelects}</div>
@@ -930,8 +991,9 @@ function renderPrep(){
   totalPlan = planStrokes.reduce((s,x)=>s+x,0);
   const plannedHoles = planStrokes.filter(x=>x>0).length;
   // 홀 네비 탭
+  const keyBox=document.getElementById('prepKeyHoles'); if(keyBox) keyBox.innerHTML=keyHolesSummary();
   const tabs = document.getElementById('prepHoleTabs');
-  if(tabs) tabs.innerHTML = hs.map(h=>{ const hasPath=Array.isArray(h.waypoints)&&h.waypoints.length>=2; return `<div class="hole-tab ${(planStrokes[hs.indexOf(h)]>0||hasPath)?'done':''}" onclick="jumpHole('prepcard_',${h.number})">${h.number}H${hasPath?'✏️':''}</div>`; }).join('');
+  if(tabs) tabs.innerHTML = hs.map(h=>{ const hasPath=Array.isArray(h.waypoints)&&h.waypoints.length>=2; return `<div class="hole-tab ${(planStrokes[hs.indexOf(h)]>0||hasPath)?'done':''}" style="${tabTagStyle(h)}" onclick="jumpHole('prepcard_',${h.number})">${h.number}H${tabTagMark(h)}${hasPath?'✏️':''}</div>`; }).join('');
   // 계획 총타수
   const totEl = document.getElementById('prepPlanTotal');
   if(totEl){
@@ -1017,6 +1079,7 @@ function holeInputCard(h){
     </div>` : '';
   return `<div class="hole-card" id="inputcard_${h.number}">
     <div class="hole-number">홀 ${h.number} (Par ${h.par}${h.dist?', '+h.dist+'m':''})</div>
+    ${holeBadge(h)}
     ${holeMapView(h)}
     ${photoGallery(h)}
     ${pastHoleAnalysis(h)}
@@ -1163,8 +1226,9 @@ function renderInput(){
     html+=`<div class="nine-title">🏌️ Back 9: ${b}</div><div class="hole-grid">`+hs.slice(half).map(holeInputCard).join('')+'</div>';
   }
   document.getElementById('inputGrid').innerHTML=html; updateLive();
+  const keyBox=document.getElementById('inputKeyHoles'); if(keyBox) keyBox.innerHTML=keyHolesSummary();
   const tabs=document.getElementById('inputHoleTabs');
-  if(tabs) tabs.innerHTML = hs.map(h=>{ const shots=Array.isArray(current.clubs[h.number])?current.clubs[h.number].filter(s=>s):[]; return `<div class="hole-tab ${shots.length>0?'done':''}" onclick="jumpHole('inputcard_',${h.number})">${h.number}H</div>`; }).join('');
+  if(tabs) tabs.innerHTML = hs.map(h=>{ const shots=Array.isArray(current.clubs[h.number])?current.clubs[h.number].filter(s=>s):[]; return `<div class="hole-tab ${shots.length>0?'done':''}" style="${tabTagStyle(h)}" onclick="jumpHole('inputcard_',${h.number})">${h.number}H${tabTagMark(h)}</div>`; }).join('');
 }
 function goPost(){ renderPost(); show('postView'); }
 function holePostCard(h){
@@ -1347,5 +1411,17 @@ function toggleSlope(i){
 initSupabase();
 renderSlopeGuide();
 </script>
+<!-- 내 클럽 설정 모달 -->
+<div id="clubModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9998;align-items:center;justify-content:center;padding:16px;">
+  <div style="background:#fff;border-radius:12px;max-width:420px;width:100%;max-height:85vh;overflow:auto;padding:18px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <h3 style="margin:0;color:#1e3c72;font-size:1.1em;">⚙️ 내 클럽 설정</h3>
+      <span onclick="closeClubSettings()" style="cursor:pointer;font-size:1.3em;color:#888;padding:4px 8px;">✕</span>
+    </div>
+    <p style="font-size:0.8em;color:#666;line-height:1.5;margin:0 0 10px;">체크=신뢰(추천에 사용) / 해제=연습중(제외). 거리도 수정 가능. 겨울 레슨 후 우드·유틸이 되면 <b>여기서 직접 체크</b>하면 추천이 자동으로 바뀝니다.</p>
+    <div id="clubModalBody"></div>
+    <button class="btn btn-success" style="width:100%;margin-top:14px;" onclick="closeClubSettings(); if(current.course && document.getElementById('prepView').classList.contains('active')) renderPrep();">완료</button>
+  </div>
+</div>
 </body>
 </html>
