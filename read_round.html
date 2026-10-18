@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0"><title>라운드 불러오기</title>
+<style>
+ body{font-family:-apple-system,'Apple SD Gothic Neo',sans-serif;background:#f0f4f8;margin:0;padding:16px;color:#1e3c72;}
+ .box{max-width:640px;margin:0 auto;background:#fff;border-radius:12px;padding:16px;box-shadow:0 2px 12px rgba(0,0,0,.08);}
+ h1{font-size:1.15em;margin:0 0 6px;}p{font-size:.84em;color:#555;line-height:1.5;}
+ select,button{font-size:1em;padding:9px;border-radius:8px;border:1px solid #cdd6e5;margin-top:8px;}
+ button{background:#2a5298;color:#fff;border:none;font-weight:700;width:100%;}
+ table{width:100%;border-collapse:collapse;margin-top:12px;font-size:.8em;}
+ th,td{border:1px solid #e3e8f0;padding:5px 6px;text-align:center;}
+ th{background:#f0f4ff;} .miss{color:#c62828;font-weight:700;} .big{background:#fff0f0;}
+ textarea{width:100%;height:160px;margin-top:12px;font-size:.78em;border:1px solid #cdd6e5;border-radius:8px;padding:8px;}
+ .ok{color:#2e7d32;font-weight:700}.err{color:#c62828;font-weight:700}
+ #log{font-size:.82em;margin-top:8px;white-space:pre-wrap;}
+</style></head><body>
+<div class="box">
+ <h1>⛳ 라운드 불러오기</h1>
+ <p>코스를 고르면 가장 최근 라운드를 홀별로 보여주고, 아래 박스에 <b>복사용 요약</b>을 만들어줍니다. 그 텍스트를 복사해서 클로드에 붙여넣으면 복기해줘요.</p>
+ <select id="courseSel"></select>
+ <button id="load" style="margin-top:10px;">이 코스 최근 라운드 불러오기</button>
+ <div id="log"></div>
+ <div id="tableWrap"></div>
+ <textarea id="copyText" placeholder="여기에 복사용 요약이 생성됩니다…"></textarea>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const sb=supabase.createClient('https://okscfgttlckufpzfqwcs.supabase.co','sb_publishable_cgJc4XV1iHQlUvxNR7iysQ_Q-5wSmev');
+const log=(m,c)=>{const l=document.getElementById('log');l.innerHTML=(c?`<span class="${c}">${m}</span>`:m);};
+let COURSES=[];
+async function init(){
+ const {data,error}=await sb.from('courses').select('*').order('name');
+ if(error){log('코스 조회 실패: '+error.message,'err');return;}
+ COURSES=data||[];
+ document.getElementById('courseSel').innerHTML=COURSES.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+}
+document.getElementById('load').onclick=async function(){
+ const cid=document.getElementById('courseSel').value;
+ const course=COURSES.find(c=>c.id===cid);
+ log('불러오는 중…');
+ const {data,error}=await sb.from('rounds').select('*').eq('course_id',cid);
+ if(error){log('라운드 조회 실패: '+error.message,'err');return;}
+ const rounds=(data||[]).map(r=>({id:r.id,...(r.data||{})})).filter(r=>r.holes);
+ if(!rounds.length){log('이 코스에 홀별 기록이 있는 라운드가 없어요. (스코어만 저장된 라운드는 홀 상세가 없음)','err');return;}
+ rounds.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+ const R=rounds[0];
+ log(`✅ ${course.name} · ${R.date} · 총 ${R.total}타`,'ok');
+ // 표
+ let rows='',txt=`[${course.name}] ${R.date} 총 ${R.total}타\n`;
+ (course.holes||[]).forEach(h=>{
+  const d=R.holes[h.number]; if(!d) return;
+  const plan=(h.planClubs||[]).filter(x=>x).join('·')||'-';
+  const act=(d.actual||[]).join('·')||'-';
+  const miss=(d.misses||[]).map((m,i)=>m&&m!=='정타'?`${(d.actual||[])[i]||'?'} ${m}`:'').filter(x=>x).join(', ');
+  const diff=d.score-h.par;
+  const big=diff>=2?'big':'';
+  rows+=`<tr class="${big}"><td>${h.number}</td><td>${h.par}</td><td>${h.dist||'-'}</td><td>${plan}</td><td>${act}</td><td>${d.score}(${diff>0?'+'+diff:diff})</td><td class="miss">${miss||''}</td></tr>`;
+  txt+=`${h.number}번 par${h.par} ${h.dist||'?'}m | 계획 ${plan} | 실제 ${act} ${d.score}타(${diff>0?'+'+diff:diff})${miss?' | 미스: '+miss:''}\n`;
+ });
+ document.getElementById('tableWrap').innerHTML=`<table><tr><th>홀</th><th>Par</th><th>거리</th><th>계획</th><th>실제</th><th>스코어</th><th>미스</th></tr>${rows}</table>`;
+ document.getElementById('copyText').value=txt;
+};
+init();
+</script></body></html>
