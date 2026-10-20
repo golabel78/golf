@@ -66,6 +66,18 @@ body { font-family:'Noto Sans KR',-apple-system,sans-serif; background:linear-gr
 .hole-tab { flex:0 0 auto; min-width:40px; padding:7px 4px; text-align:center; background:#eef3ff; color:#1e3c72; border:1px solid #cdddff; border-radius:6px; font-size:0.8em; font-weight:700; cursor:pointer; }
 .hole-tab.done { background:#2a5298; color:#fff; }
 .plan-total { background:linear-gradient(135deg,#2a5298,#1e3c72); color:#fff; padding:16px; border-radius:10px; text-align:center; margin:14px 0; }
+/* ===== UX 개선: 하단 네비 · 모달 · 상단고정 · 코스카드 접기 ===== */
+body { padding-bottom:70px; }
+.bottom-nav { position:fixed; left:0; right:0; bottom:0; z-index:100; display:flex; background:#fff; border-top:1px solid #e3e8f0; box-shadow:0 -2px 10px rgba(0,0,0,.08); }
+.bottom-nav button { flex:1; border:none; background:none; padding:8px 2px 6px; font-size:0.68em; color:#8a97ad; display:flex; flex-direction:column; align-items:center; gap:2px; cursor:pointer; font-weight:600; }
+.bottom-nav button .ic { font-size:1.35em; line-height:1; }
+.bottom-nav button.active { color:#2a5298; }
+.modal-ov { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:120; overflow:auto; }
+.modal-ov .modal-box { background:#fff; border-radius:12px; max-width:560px; width:calc(100% - 32px); margin:40px auto; padding:18px; }
+.modal-ov .modal-close { float:right; cursor:pointer; font-size:1.3em; color:#888; padding:2px 6px; }
+.dash-sticky { position:sticky; top:0; z-index:40; background:#fff; padding:10px 12px; margin:0 0 10px; border-radius:10px; box-shadow:0 2px 8px rgba(0,0,0,.08); }
+.course-card .cc-head { cursor:pointer; display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+.course-card .cc-chev { color:#8a97ad; font-size:0.9em; flex:0 0 auto; }
 </style>
 </head>
 <body>
@@ -84,19 +96,13 @@ body { font-family:'Noto Sans KR',-apple-system,sans-serif; background:linear-gr
 
 <!-- 대시보드 -->
 <div id="dashboardView" class="view">
-  <div class="card">
-    <h2 class="section-title">📍 내 코스 목록</h2>
-    <div class="input-field" style="margin-bottom:16px;">
-      <input type="text" id="courseSearch" placeholder="🔍 코스 검색 (예: 엘리시안, H1cc...)" oninput="renderDashboard()" style="padding:12px; border:2px solid #2a5298; border-radius:8px; font-size:1em;">
+  <div class="dash-sticky">
+    <div style="display:flex; gap:8px; align-items:center;">
+      <input type="text" id="courseSearch" placeholder="🔍 코스 검색" oninput="renderDashboard()" style="flex:1; padding:10px; border:2px solid #2a5298; border-radius:8px; font-size:0.95em;">
+      <button class="btn btn-primary" style="margin:0; padding:10px 14px; white-space:nowrap;" onclick="openAddCourse()">+ 코스</button>
     </div>
-    <div id="courseList"></div>
-    <div class="button-group"><button class="btn btn-primary" onclick="openAddCourse()">+ 새 코스 추가</button></div>
   </div>
-  <div class="card">
-    <h2 class="section-title">⛰️ 경사지 공략 가이드</h2>
-    <p style="color:#666; font-size:0.9em; margin-bottom:14px;">페어웨이·어프로치에서 만나는 4가지 경사지 상황별 공략법이에요. 탭하면 펼쳐집니다.</p>
-    <div id="slopeGuide"></div>
-  </div>
+  <div id="courseList"></div>
 </div>
 
 <!-- 코스 추가/수정 -->
@@ -175,7 +181,11 @@ body { font-family:'Noto Sans KR',-apple-system,sans-serif; background:linear-gr
     <div id="inputKeyHoles"></div>
     <div class="hole-tabs" id="inputHoleTabs"></div>
     <div id="inputGrid"></div>
-    <div class="button-group"><button class="btn btn-success" onclick="goPost()">✓ 라운드 완료</button></div>
+    <div class="button-group" style="display:flex;gap:8px;">
+      <button class="btn btn-primary" style="flex:1;" onclick="saveRoundNow()">💾 저장</button>
+      <button class="btn btn-success" style="flex:1;" onclick="goPost()">✓ 라운드 완료</button>
+    </div>
+    <div style="text-align:center;font-size:0.74em;color:#2e7d32;margin-top:-4px;">클럽·결과 입력할 때마다 자동 저장돼요 (💾로 수동 저장도 가능)</div>
   </div>
 </div>
 
@@ -366,25 +376,40 @@ function renderDashboard() {
     const mapHoles = c.holes.filter(h=>h.map);
     let thumb = '';
     if(mapHoles.length){
-      thumb = `<div style="display:flex;gap:5px;overflow-x:auto;margin:8px 0;padding-bottom:4px;">`+
-        mapHoles.slice(0,6).map(h=>`<img src="${h.map}" style="height:56px;border-radius:5px;flex:0 0 auto;border:1px solid #dde;">`).join('')+
-        (mapHoles.length>6?`<span style="align-self:center;font-size:0.75em;color:#888;">+${mapHoles.length-6}</span>`:'')+`</div>`;
+      thumb = `<div style="display:flex;gap:5px;overflow-x:auto;margin:10px 0 4px;padding-bottom:4px;">`+
+        mapHoles.map(h=>`<img src="${h.map}" style="height:64px;border-radius:5px;flex:0 0 auto;border:1px solid #dde;">`).join('')+`</div>`;
     }
+    const recInline = recs.length>0 ? ` · 베스트 ${Math.min(...recs.map(r=>r.total||999))}타` : '';
     return `
     <div class="course-card">
-      <h3>${c.name}</h3>
-      <p>${c.holes.length}홀 · Par ${c.holes.reduce((s,h)=>s+Number(h.par||0),0)} · 홀맵 ${mapHoles.length}개</p>
-      ${thumb}
-      ${recHtml}
-      <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
-        <button class="btn btn-secondary" style="padding:6px 12px; font-size:0.85em;" onclick="editCourse('${c.id}')">✏️ 수정</button>
-        <button class="btn btn-danger" style="padding:6px 12px; font-size:0.85em;" onclick="deleteCourse('${c.id}')">🗑️ 삭제</button>
-        <button class="btn btn-primary" style="padding:6px 12px; font-size:0.85em;" onclick="startRound('${c.id}')">▶️ 라운드</button>
-        <button class="btn btn-secondary" style="padding:6px 12px; font-size:0.85em;" onclick="openHoleTable('${c.id}')">📊 홀별 기록</button>
-        <button class="btn btn-secondary" style="padding:6px 12px; font-size:0.85em;" onclick="openAnalysis('${c.id}')">📈 분석</button>
+      <div class="cc-head" onclick="toggleCourseCard('${c.id}')">
+        <div>
+          <h3 style="margin:0;">${c.name}</h3>
+          <p style="margin:3px 0 0;">${c.holes.length}홀 · Par ${c.holes.reduce((s,h)=>s+Number(h.par||0),0)} · 🗺️${mapHoles.length}${recInline}</p>
+        </div>
+        <span class="cc-chev" id="chev_${c.id}">▾ 펼치기</span>
+      </div>
+      <div style="margin-top:10px; display:flex; gap:6px; flex-wrap:wrap;">
+        <button class="btn btn-primary" style="padding:7px 14px; font-size:0.85em;" onclick="startRound('${c.id}')">▶️ 라운드</button>
+        <button class="btn btn-secondary" style="padding:7px 12px; font-size:0.85em;" onclick="openHoleTable('${c.id}')">📊 기록</button>
+        <button class="btn btn-secondary" style="padding:7px 12px; font-size:0.85em;" onclick="openAnalysis('${c.id}')">📈 분석</button>
+      </div>
+      <div id="ccbody_${c.id}" style="display:none;">
+        ${mapHoles.length?`<div style="font-size:0.78em;color:#888;margin-top:10px;">🗺️ 홀맵 ${mapHoles.length}개</div>`:''}
+        ${thumb}
+        ${recHtml}
+        <div style="margin-top:10px; display:flex; gap:6px; flex-wrap:wrap;">
+          <button class="btn btn-secondary" style="padding:6px 12px; font-size:0.82em;" onclick="editCourse('${c.id}')">✏️ 수정</button>
+          <button class="btn btn-danger" style="padding:6px 12px; font-size:0.82em;" onclick="deleteCourse('${c.id}')">🗑️ 삭제</button>
+        </div>
       </div>
     </div>`;
   }).join('');
+}
+function toggleCourseCard(id){
+  const b=document.getElementById('ccbody_'+id); const ch=document.getElementById('chev_'+id);
+  if(!b)return; const open=b.style.display!=='none';
+  b.style.display=open?'none':'block'; if(ch) ch.textContent=open?'▾ 펼치기':'▴ 접기';
 }
 
 function openAnalysis(courseId){
@@ -650,15 +675,26 @@ async function saveCourse() {
 
 function startRound(id){
   const c=courses.find(x=>x.id===id); if(!c)return;
-  current={course:c, goals:{}, scores:{}, clubs:{}, notes:{}, actualClubs:{}, postNotes:{}, planClubs:{}, misses:{}};
+  current={course:c, roundId:'r'+Date.now(), goals:{}, scores:{}, clubs:{}, notes:{}, actualClubs:{}, postNotes:{}, planClubs:{}, misses:{}};
   // 코스에 저장된 계획(클럽/메모) 복원 → 라운드 준비 때 세운 계획이 라운드 중에도 보임
   c.holes.forEach(h=>{
     if(Array.isArray(h.planClubs)&&h.planClubs.length) current.planClubs[h.number]=h.planClubs.slice();
     if(h.planMemo) current.goals[h.number]=h.planMemo;
   });
+  // 저장 안 된 라운드 이어하기
+  const draft=loadDraftFor(c.id);
+  if(draft && draft.holesCount>0 && confirm(`저장 안 된 "${c.name}" 라운드가 있어요 (${draft.date||''} · ${draft.holesCount}홀 입력됨).\n이어서 불러올까요?`)){
+    current.roundId=draft.roundId||current.roundId;
+    current.clubs=draft.clubs||{}; current.scores=draft.scores||{}; current.misses=draft.misses||{};
+    current.notes=draft.notes||{};
+    if(draft.goals) current.goals=Object.assign(current.goals, draft.goals);
+    if(draft.planClubs) current.planClubs=draft.planClubs;
+  }
   document.getElementById('r_courseName').value=c.name;
-  document.getElementById('r_date').valueAsDate=new Date();
-  document.getElementById('r_front9').value=''; document.getElementById('r_back9').value=''; document.getElementById('r_greenspeed').value='';
+  const _dft=loadDraftFor(c.id);
+  const _resumed = _dft && Object.keys(current.clubs||{}).length>0;
+  if(_resumed && _dft.date){ document.getElementById('r_date').value=_dft.date; } else { document.getElementById('r_date').valueAsDate=new Date(); }
+  document.getElementById('r_front9').value=(_resumed?_dft.front9:'')||''; document.getElementById('r_back9').value=(_resumed?_dft.back9:'')||''; document.getElementById('r_greenspeed').value='';
   renderPrep(); show('prepView');
 }
 // ===== 내 클럽 설정 (신뢰 여부 + 거리). localStorage에 저장, 셀프 업데이트 가능 =====
@@ -1089,12 +1125,13 @@ function holeInputCard(h){
     ${scoreLabel?`<div style="background:#2a5298;color:#fff;padding:8px 10px;border-radius:6px;font-weight:700;font-size:1em;text-align:center;margin-bottom:8px;">${scoreLabel}</div>`:''}
     ${shotCompare(h)}
     ${nextHoleAdvice(h)}
-    <div class="hole-input"><label>전략·메모</label><input type="text" value="${current.notes[h.number]||''}" onchange="current.notes[${h.number}]=this.value" placeholder="샷·전략 코멘트"></div>
+    <div class="hole-input"><label>전략·메모</label><input type="text" value="${current.notes[h.number]||''}" onchange="current.notes[${h.number}]=this.value; saveDraft(); scheduleCloudSave();" placeholder="샷·전략 코멘트"></div>
   </div>`;
 }
 function setMiss(holeNum, idx, val){
   if(!Array.isArray(current.misses[holeNum])) current.misses[holeNum]=[];
   current.misses[holeNum][idx]=val;
+  saveDraft(); scheduleCloudSave();
   renderInput();
 }
 // ===== 계획 vs 실제 비교 + 미스 감지 =====
@@ -1192,6 +1229,7 @@ function setClub(holeNum, idx, val){
   }
   const strokes = current.clubs[holeNum].filter(s=>s).length;
   current.scores[holeNum] = strokes>0 ? strokes : '';
+  saveDraft(); scheduleCloudSave();
   renderInput();
 }
 function updateLive(){
@@ -1230,7 +1268,7 @@ function renderInput(){
   const tabs=document.getElementById('inputHoleTabs');
   if(tabs) tabs.innerHTML = hs.map(h=>{ const shots=Array.isArray(current.clubs[h.number])?current.clubs[h.number].filter(s=>s):[]; return `<div class="hole-tab ${shots.length>0?'done':''}" style="${tabTagStyle(h)}" onclick="jumpHole('inputcard_',${h.number})">${h.number}H${tabTagMark(h)}</div>`; }).join('');
 }
-function goPost(){ renderPost(); show('postView'); }
+async function goPost(){ saveDraft(); await saveRoundCloud(true); renderPost(); show('postView'); }
 function holePostCard(h){
   const shots = Array.isArray(current.clubs[h.number]) ? current.clubs[h.number].filter(s=>s) : [];
   const usedClubs = shots.length ? shots.join(' → ') : '';
@@ -1263,40 +1301,70 @@ function renderPost(){
   }
   document.getElementById('postGrid').innerHTML=html;
 }
+// ===== 라운드 자동저장 (폰 즉시저장 + 클라우드) =====
+function buildHolesDetail(){
+  const holesDetail={}; let total=0, played=false;
+  current.course.holes.forEach(h=>{
+    const act=(Array.isArray(current.clubs[h.number])?current.clubs[h.number]:[]).filter(s=>s);
+    if(!act.length) return;
+    played=true; total+=act.length;
+    holesDetail[h.number]={
+      score: current.scores[h.number]||act.length, par:h.par,
+      plan:(Array.isArray(current.planClubs[h.number])?current.planClubs[h.number]:[]).filter(s=>s),
+      actual:act,
+      misses:(Array.isArray(current.misses[h.number])?current.misses[h.number]:[]).slice(0,act.length),
+      notes: current.notes[h.number]||''
+    };
+  });
+  return {holesDetail, total, played};
+}
+function _rv(id){ const e=document.getElementById(id); return e?e.value:''; }
+function saveDraft(){
+  try{
+    if(!current.course) return;
+    const cnt=Object.keys(current.clubs||{}).filter(k=>(current.clubs[k]||[]).filter(x=>x).length).length;
+    const d={ roundId:current.roundId, courseId:current.course.id, date:_rv('r_date'),
+      front9:_rv('r_front9'), back9:_rv('r_back9'),
+      clubs:current.clubs, scores:current.scores, misses:current.misses, notes:current.notes,
+      goals:current.goals, planClubs:current.planClubs, ts:Date.now(), holesCount:cnt };
+    localStorage.setItem('roundDraft_'+current.course.id, JSON.stringify(d));
+  }catch(e){}
+}
+function loadDraftFor(courseId){ try{ const s=localStorage.getItem('roundDraft_'+courseId); return s?JSON.parse(s):null; }catch(e){ return null; } }
+function clearDraft(courseId){ try{ localStorage.removeItem('roundDraft_'+courseId); }catch(e){} }
+let _cloudTimer=null;
+function scheduleCloudSave(){ clearTimeout(_cloudTimer); _cloudTimer=setTimeout(()=>saveRoundCloud(false), 2500); }
+async function saveRoundCloud(showStatus){
+  if(!current.course || !current.roundId) return false;
+  const {holesDetail, total, played}=buildHolesDetail();
+  if(!played) return false;
+  const rec={ id:current.roundId, course_id:current.course.id, data:{date:_rv('r_date'), total, holes:holesDetail} };
+  if(showStatus) setStatus('sync','☁️ 라운드 저장 중...');
+  try{
+    const {error}=await sb.from('rounds').upsert(rec);
+    if(error) throw error;
+    const entry={id:current.roundId, course_id:current.course.id, date:_rv('r_date'), total, holes:holesDetail};
+    const i=roundRecords.findIndex(r=>r.id===current.roundId);
+    if(i>=0) roundRecords[i]=entry; else roundRecords.push(entry);
+    if(showStatus) setStatus('on','✅ 라운드 저장됨 ('+total+'타)');
+    return true;
+  }catch(e){
+    if(showStatus) setStatus('off','⚠️ 라운드 저장 실패 — 네트워크 확인 후 💾 다시');
+    return false;
+  }
+}
+// 수동 저장 버튼
+async function saveRoundNow(){
+  saveDraft();
+  const ok=await saveRoundCloud(true);
+  if(ok) alert('✅ 라운드가 클라우드에 저장됐어요. 이제 안 날아갑니다.');
+  else alert('⚠️ 클라우드 저장 실패. 폰에는 임시저장돼 있어요(이어하기 가능). 네트워크 확인 후 다시 눌러주세요.');
+}
 async function goExport(){
   document.getElementById('codeOut').textContent=buildBlogHTML();
-  // 라운드 기록을 클라우드에 저장
-  try {
-    let totalStrokes=0, played=false;
-    current.course.holes.forEach(h=>{
-      const shots = Array.isArray(current.clubs[h.number]) ? current.clubs[h.number].filter(s=>s) : [];
-      if (shots.length>0){ played=true; totalStrokes+=shots.length; }
-    });
-    if (played) {
-      // 홀별 상세(계획/실제/미스) 저장 → 다음 라운드 분석·조언에 사용
-      const holesDetail={};
-      current.course.holes.forEach(h=>{
-        const act=(Array.isArray(current.clubs[h.number])?current.clubs[h.number]:[]).filter(s=>s);
-        if(!act.length) return;
-        holesDetail[h.number]={
-          score: current.scores[h.number]||act.length,
-          par: h.par,
-          plan: (Array.isArray(current.planClubs[h.number])?current.planClubs[h.number]:[]).filter(s=>s),
-          actual: act,
-          misses: (Array.isArray(current.misses[h.number])?current.misses[h.number]:[]).slice(0,act.length),
-          notes: current.notes[h.number]||''
-        };
-      });
-      const dateVal=document.getElementById('r_date').value;
-      const rec = {
-        id: 'r'+Date.now(),
-        course_id: current.course.id,
-        data: { date: dateVal, total: totalStrokes, holes: holesDetail }
-      };
-      await sb.from('rounds').upsert(rec);
-      roundRecords.push({ id:rec.id, course_id:current.course.id, date:dateVal, total:totalStrokes, holes:holesDetail });
-    }
-  } catch(e) {}
+  saveDraft();
+  await saveRoundCloud(true);   // 저장 확정 + 상태 표시
+  clearDraft(current.course.id);
   show('exportView');
 }
 function buildBlogHTML(){
@@ -1338,7 +1406,18 @@ ${notes?`<h2 style="font-size:1.4em;color:#1e3a5f;margin-bottom:16px;padding-bot
 <div style="background:#f8f9fa;padding:18px;text-align:center;color:#999;font-size:0.85em;">⛳ 골프 라운드 기록 | ${date}</div></div>`;
 }
 function copyCode(){ navigator.clipboard.writeText(document.getElementById('codeOut').textContent).then(()=>{const m=document.getElementById('copyMsg');m.style.display='block';setTimeout(()=>m.style.display='none',3000);}); }
-function show(id){ document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); document.getElementById(id).classList.add('active'); window.scrollTo(0,0); }
+function show(id){ document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); document.getElementById(id).classList.add('active'); window.scrollTo(0,0); updateNav(id); }
+// ===== 경사 가이드 모달 =====
+function openSlopeModal(){ renderSlopeGuide(); document.getElementById('slopeModal').style.display='block'; }
+function closeSlopeModal(){ document.getElementById('slopeModal').style.display='none'; }
+// ===== 하단 네비게이션 =====
+function navRound(){ if(current && current.course){ show('inputView'); } else { show('dashboardView'); } }
+function updateNav(id){
+  const v = id || (document.querySelector('.view.active')||{}).id || 'dashboardView';
+  const map = { dashboardView:'코스', prepView:'라운드', inputView:'라운드', postView:'라운드', exportView:'라운드' };
+  const active = map[v] || '';
+  document.querySelectorAll('.bottom-nav button').forEach(b=>{ b.classList.toggle('active', b.dataset.nav===active); });
+}
 
 // 경사지 공략 가이드
 const SLOPE_GUIDE = [
@@ -1422,6 +1501,24 @@ renderSlopeGuide();
     <div id="clubModalBody"></div>
     <button class="btn btn-success" style="width:100%;margin-top:14px;" onclick="closeClubSettings(); if(current.course && document.getElementById('prepView').classList.contains('active')) renderPrep();">완료</button>
   </div>
+</div>
+
+<!-- 경사지 공략 가이드 모달 -->
+<div id="slopeModal" class="modal-ov">
+  <div class="modal-box">
+    <span class="modal-close" onclick="closeSlopeModal()">✕</span>
+    <h3 style="margin:0 0 4px;color:#1e3c72;font-size:1.1em;">⛰️ 경사지 공략 가이드</h3>
+    <p style="color:#666;font-size:0.82em;margin:0 0 12px;">4가지 경사 상황별 공략법. 탭하면 펼쳐집니다. (라운드 중에도 하단 📐 버튼으로 바로 열기)</p>
+    <div id="slopeGuide"></div>
+  </div>
+</div>
+
+<!-- 하단 네비게이션 바 -->
+<div class="bottom-nav">
+  <button data-nav="코스" onclick="show('dashboardView')"><span class="ic">🏠</span>코스</button>
+  <button data-nav="라운드" onclick="navRound()"><span class="ic">⛳</span>라운드</button>
+  <button data-nav="경사" onclick="openSlopeModal()"><span class="ic">📐</span>경사</button>
+  <button data-nav="설정" onclick="openClubSettings()"><span class="ic">⚙️</span>내 클럽</button>
 </div>
 </body>
 </html>
