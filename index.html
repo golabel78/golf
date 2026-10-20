@@ -1420,69 +1420,148 @@ function updateNav(id){
 }
 
 // 경사지 공략 가이드
-const SLOPE_GUIDE = [
+// 경사 라이 4종 — 그림(SVG)은 일반/어프로치 공통, 공략법만 상황별로 다름
+const SLOPE_LIES = [
   {
-    icon:'⬆️', title:'오르막 라이 (공이 발보다 높음)',
-    color:'#2e7d32',
-    tips:[
-      '공이 발보다 위에 있어 훅(왼쪽으로 감)이 나기 쉬움 → 목표보다 오른쪽 겨냥',
-      '경사만큼 그립을 짧게 잡고 스윙을 컴팩트하게',
-      '볼이 몸쪽에 가까우니 평소보다 한 클럽 짧게(작게) 선택',
-      '체중은 경사 반대(앞발)로, 균형 유지가 최우선'
+    key:'toeup', icon:'🦶', title:'발끝 오르막 (공이 발보다 높음)', color:'#2e7d32',
+    svg:`<svg viewBox="0 0 180 104" width="100%" style="max-width:240px;display:block;margin:0 auto 10px;border-radius:8px;">
+      <rect width="180" height="104" fill="#eef6ff"/>
+      <path d="M0,86 L180,52 L180,104 L0,104Z" fill="#a5d66a"/>
+      <line x1="0" y1="86" x2="180" y2="52" stroke="#6b9e39" stroke-width="2.5"/>
+      <circle cx="54" cy="46" r="7" fill="#37474f"/>
+      <rect x="51" y="52" width="6" height="22" rx="3" fill="#37474f"/>
+      <circle cx="124" cy="60" r="6.5" fill="#fff" stroke="#333" stroke-width="1.5"/>
+      <path d="M124,60 C108,22 72,16 42,28" fill="none" stroke="#e53935" stroke-width="2.5" stroke-dasharray="5,4"/>
+      <polygon points="42,28 53,23 52,34" fill="#e53935"/>
+      <text x="8" y="18" font-size="12" font-weight="700" fill="#c62828">훅 ← 왼쪽</text>
+    </svg>`,
+    general:[
+      '공이 발보다 높음 → 훅(왼쪽)이 잘 남. 목표보다 살짝 <b>오른쪽</b> 겨냥',
+      '그립을 짧게 잡고 상체를 세워 거리 보정 → 한 클럽 짧게',
+      '스윙은 평소보다 플랫하게(둥글게), 풀스윙 자제',
+      '체중은 발끝(앞)쪽에 살짝, 균형 유지가 최우선'
+    ],
+    approach:[
+      '그립을 더 짧게 내려 잡고 공과의 거리 맞추기',
+      '공이 왼쪽으로 잘 빠짐 → 핀보다 <b>오른쪽</b> 보고 굴리기',
+      '로프트 큰 클럽(SW/AW)으로 부드럽게, 큰 스윙 금지',
+      '끝까지 자세 유지하며 쓸어 치기'
     ]
   },
   {
-    icon:'⬇️', title:'내리막 라이 (공이 발보다 낮음)',
-    color:'#c62828',
-    tips:[
-      '슬라이스(오른쪽으로 감)가 나기 쉬움 → 목표보다 왼쪽 겨냥',
-      '무릎을 더 굽혀 공에 가까이, 스윙 내내 자세 유지',
-      '거리가 줄기 쉬우니 한 클럽 길게(크게) 선택',
-      '끝까지 공을 보고, 몸이 일어나지 않게 주의'
+    key:'toedown', icon:'🦶', title:'발끝 내리막 (공이 발보다 낮음)', color:'#c62828',
+    svg:`<svg viewBox="0 0 180 104" width="100%" style="max-width:240px;display:block;margin:0 auto 10px;border-radius:8px;">
+      <rect width="180" height="104" fill="#eef6ff"/>
+      <path d="M0,50 L180,88 L180,104 L0,104Z" fill="#a5d66a"/>
+      <line x1="0" y1="50" x2="180" y2="88" stroke="#6b9e39" stroke-width="2.5"/>
+      <circle cx="52" cy="30" r="7" fill="#37474f"/>
+      <rect x="49" y="36" width="6" height="22" rx="3" fill="#37474f"/>
+      <circle cx="126" cy="72" r="6.5" fill="#fff" stroke="#333" stroke-width="1.5"/>
+      <path d="M126,72 C122,36 150,24 170,34" fill="none" stroke="#e53935" stroke-width="2.5" stroke-dasharray="5,4"/>
+      <polygon points="170,34 160,30 164,40" fill="#e53935"/>
+      <text x="104" y="18" font-size="11.5" font-weight="700" fill="#c62828">→ 오른쪽</text>
+    </svg>`,
+    general:[
+      '공이 발보다 낮음 → 슬라이스/푸시(오른쪽)가 잘 남. 목표보다 살짝 <b>왼쪽</b> 겨냥',
+      '무릎을 더 깊게 굽혀 공에 닿게, 체중은 뒤꿈치',
+      '거리 줄기 쉬우니 한 클럽 길게, 컴팩트 스윙',
+      '임팩트까지 몸이 일어나지 않게(머리 숙인 채) 유지'
+    ],
+    approach:[
+      '무릎 굽혀 낮은 자세 유지, 끝까지 머리 고정',
+      '공이 오른쪽으로 잘 빠짐 → 핀보다 <b>왼쪽</b> 겨냥',
+      '뒤땅/토핑 주의 → 작고 또렷한 스윙으로 정확히 맞히기',
+      '욕심내지 말고 그린 중앙으로 안전하게'
     ]
   },
   {
-    icon:'📈', title:'오르막 경사 (그린이 높은 곳)',
-    color:'#1565c0',
-    tips:[
-      '볼이 높이 뜨고 거리가 짧아짐 → 한두 클럽 길게 선택',
-      '경사를 따라 체중을 오르막 쪽(뒷발)에 조금 더',
-      '평소보다 큰 스윙보다 정확한 임팩트에 집중',
-      '핀까지 실제 거리 + 높이 보정(대략 높이 10m당 +10m)'
+    key:'uphill', icon:'📈', title:'왼발 오르막 (오르막 라이)', color:'#1565c0',
+    svg:`<svg viewBox="0 0 180 104" width="100%" style="max-width:240px;display:block;margin:0 auto 10px;border-radius:8px;">
+      <rect width="180" height="104" fill="#eef6ff"/>
+      <path d="M0,40 L180,86 L180,104 L0,104Z" fill="#a5d66a"/>
+      <line x1="0" y1="40" x2="180" y2="86" stroke="#6b9e39" stroke-width="2.5"/>
+      <circle cx="120" cy="65" r="6.5" fill="#fff" stroke="#333" stroke-width="1.5"/>
+      <path d="M120,65 C94,8 54,6 20,32" fill="none" stroke="#e53935" stroke-width="2.5" stroke-dasharray="5,4"/>
+      <polygon points="20,32 31,28 30,39" fill="#e53935"/>
+      <text x="86" y="20" font-size="11.5" font-weight="700" fill="#c62828">높이↑ 거리↓</text>
+    </svg>`,
+    general:[
+      '오르막 → 공이 높이 뜨고 거리 짧아짐 → <b>한 클럽 더 길게</b>',
+      '어깨를 경사와 나란히, 체중은 낮은 발(오른발)',
+      '경사 따라 올려 치듯 스윙, 끝까지 균형 유지',
+      '공이 왼쪽으로 잘 감 → 살짝 <b>오른쪽</b> 겨냥'
+    ],
+    approach:[
+      '공이 더 높이 뜨고 짧게 감 → 로프트 적은 클럽(PW 등)·조금 더 세게',
+      '체중 낮은 발(오른발), 어깨를 경사와 나란히',
+      '경사면 따라 부드럽게 올려 치기',
+      '감속 금지 — 끝까지 가속해서 공 띄우기'
     ]
   },
   {
-    icon:'📉', title:'내리막 경사 (그린이 낮은 곳)',
-    color:'#6a1b9a',
-    tips:[
-      '볼이 낮게 날고 거리가 늘어남 → 한 클럽 짧게 선택',
-      '체중을 내리막 쪽(앞발)에 두고 경사를 따라 스윙',
-      '띄우려 하지 말고 경사면을 쓸어 치듯이',
-      '착지 후 많이 구르니 그린 앞쪽을 노리기'
+    key:'downhill', icon:'📉', title:'왼발 내리막 (내리막 라이)', color:'#6a1b9a',
+    svg:`<svg viewBox="0 0 180 104" width="100%" style="max-width:240px;display:block;margin:0 auto 10px;border-radius:8px;">
+      <rect width="180" height="104" fill="#eef6ff"/>
+      <path d="M0,88 L180,42 L180,104 L0,104Z" fill="#a5d66a"/>
+      <line x1="0" y1="88" x2="180" y2="42" stroke="#6b9e39" stroke-width="2.5"/>
+      <circle cx="116" cy="54" r="6.5" fill="#fff" stroke="#333" stroke-width="1.5"/>
+      <path d="M116,54 C92,42 58,48 28,62" fill="none" stroke="#e53935" stroke-width="2.5" stroke-dasharray="5,4"/>
+      <polygon points="28,62 39,57 38,68" fill="#e53935"/>
+      <circle cx="20" cy="70" r="2.2" fill="#e53935"/><circle cx="12" cy="74" r="2.2" fill="#e53935"/>
+      <text x="92" y="20" font-size="11.5" font-weight="700" fill="#c62828">낮게 · 런↑</text>
+    </svg>`,
+    general:[
+      '내리막 → 공이 낮게 깔리고 런 많음 → <b>한 클럽 짧게</b>',
+      '어깨를 경사와 나란히, 체중은 낮은 발(왼발/앞발)',
+      '띄우려 말고 경사면을 쓸어 내리듯, 끝까지 따라가기',
+      '공이 오른쪽으로 잘 감 → 살짝 <b>왼쪽</b> 겨냥'
+    ],
+    approach:[
+      '경사지 중 가장 어려움 — 낮게 나와 많이 구름',
+      '로프트 큰 클럽(SW)으로, 착지 지점을 핀보다 <b>짧게</b> 계산',
+      '체중 앞발(왼발)에 두고 경사 따라 내려 치기',
+      '퍼올리지 말 것 — 감속하면 뒤땅. 끝까지 쓸어내리기'
     ]
   }
+];
+const SLOPE_CATS = [
+  { id:'g', label:'1. 일반 경사지', sub:'페어웨이·러프에서 풀스윙할 때', field:'general', head:'#1e3c72' },
+  { id:'a', label:'2. 어프로치 경사지', sub:'그린 주변 짧은 샷(어프로치)', field:'approach', head:'#2e7d32' }
 ];
 
 function renderSlopeGuide(){
   const el = document.getElementById('slopeGuide');
   if (!el) return;
-  el.innerHTML = SLOPE_GUIDE.map((s,i)=>`
-    <div style="border:2px solid #e0e0e0;border-radius:8px;margin-bottom:10px;overflow:hidden;">
-      <div onclick="toggleSlope(${i})" style="padding:14px;cursor:pointer;background:#f8fbff;display:flex;align-items:center;gap:10px;font-weight:600;color:${s.color};">
-        <span style="font-size:1.3em;">${s.icon}</span>
-        <span style="flex:1;">${s.title}</span>
-        <span id="slope_arrow_${i}" style="color:#999;">▼</span>
+  el.innerHTML = SLOPE_CATS.map(cat=>`
+    <div style="margin-bottom:18px;">
+      <div style="padding:9px 12px;background:${cat.head};color:#fff;border-radius:8px;font-weight:700;font-size:0.98em;">
+        ${cat.label}
+        <div style="font-size:0.74em;font-weight:400;opacity:0.9;margin-top:2px;">${cat.sub}</div>
       </div>
-      <div id="slope_body_${i}" style="display:none;padding:14px;background:#fff;">
-        <ul style="margin:0;padding-left:20px;color:#444;font-size:0.9em;line-height:1.8;">
-          ${s.tips.map(t=>`<li>${t}</li>`).join('')}
-        </ul>
+      <div style="margin-top:8px;">
+        ${SLOPE_LIES.map(s=>{
+          const uid = cat.id+'_'+s.key;
+          return `<div style="border:2px solid #e8edf5;border-radius:8px;margin-bottom:8px;overflow:hidden;">
+            <div onclick="toggleSlope('${uid}')" style="padding:12px 14px;cursor:pointer;background:#f8fbff;display:flex;align-items:center;gap:9px;font-weight:600;font-size:0.95em;color:${s.color};">
+              <span style="font-size:1.2em;">${s.icon}</span>
+              <span style="flex:1;">${s.title}</span>
+              <span id="slope_arrow_${uid}" style="color:#999;">▼</span>
+            </div>
+            <div id="slope_body_${uid}" style="display:none;padding:12px 14px;background:#fff;">
+              ${s.svg}
+              <ul style="margin:0;padding-left:20px;color:#444;font-size:0.88em;line-height:1.7;">
+                ${s[cat.field].map(t=>`<li>${t}</li>`).join('')}
+              </ul>
+            </div>
+          </div>`;
+        }).join('')}
       </div>
     </div>`).join('');
 }
-function toggleSlope(i){
-  const body = document.getElementById('slope_body_'+i);
-  const arrow = document.getElementById('slope_arrow_'+i);
+function toggleSlope(uid){
+  const body = document.getElementById('slope_body_'+uid);
+  const arrow = document.getElementById('slope_arrow_'+uid);
+  if (!body) return;
   if (body.style.display==='none'){ body.style.display='block'; arrow.textContent='▲'; }
   else { body.style.display='none'; arrow.textContent='▼'; }
 }
@@ -1508,7 +1587,7 @@ renderSlopeGuide();
   <div class="modal-box">
     <span class="modal-close" onclick="closeSlopeModal()">✕</span>
     <h3 style="margin:0 0 4px;color:#1e3c72;font-size:1.1em;">⛰️ 경사지 공략 가이드</h3>
-    <p style="color:#666;font-size:0.82em;margin:0 0 12px;">4가지 경사 상황별 공략법. 탭하면 펼쳐집니다. (라운드 중에도 하단 📐 버튼으로 바로 열기)</p>
+    <p style="color:#666;font-size:0.82em;margin:0 0 12px;">일반 경사지 / 어프로치 경사지 각각 4가지 라이. 탭하면 그림+공략법이 펼쳐집니다. (라운드 중에도 하단 📐 버튼으로 바로 열기)</p>
     <div id="slopeGuide"></div>
   </div>
 </div>
