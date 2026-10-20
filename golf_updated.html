@@ -66,6 +66,18 @@ body { font-family:'Noto Sans KR',-apple-system,sans-serif; background:linear-gr
 .hole-tab { flex:0 0 auto; min-width:40px; padding:7px 4px; text-align:center; background:#eef3ff; color:#1e3c72; border:1px solid #cdddff; border-radius:6px; font-size:0.8em; font-weight:700; cursor:pointer; }
 .hole-tab.done { background:#2a5298; color:#fff; }
 .plan-total { background:linear-gradient(135deg,#2a5298,#1e3c72); color:#fff; padding:16px; border-radius:10px; text-align:center; margin:14px 0; }
+/* ===== UX 개선: 하단 네비 · 모달 · 상단고정 · 코스카드 접기 ===== */
+body { padding-bottom:70px; }
+.bottom-nav { position:fixed; left:0; right:0; bottom:0; z-index:100; display:flex; background:#fff; border-top:1px solid #e3e8f0; box-shadow:0 -2px 10px rgba(0,0,0,.08); }
+.bottom-nav button { flex:1; border:none; background:none; padding:8px 2px 6px; font-size:0.68em; color:#8a97ad; display:flex; flex-direction:column; align-items:center; gap:2px; cursor:pointer; font-weight:600; }
+.bottom-nav button .ic { font-size:1.35em; line-height:1; }
+.bottom-nav button.active { color:#2a5298; }
+.modal-ov { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:120; overflow:auto; }
+.modal-ov .modal-box { background:#fff; border-radius:12px; max-width:560px; width:calc(100% - 32px); margin:40px auto; padding:18px; }
+.modal-ov .modal-close { float:right; cursor:pointer; font-size:1.3em; color:#888; padding:2px 6px; }
+.dash-sticky { position:sticky; top:0; z-index:40; background:#fff; padding:10px 12px; margin:0 0 10px; border-radius:10px; box-shadow:0 2px 8px rgba(0,0,0,.08); }
+.course-card .cc-head { cursor:pointer; display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+.course-card .cc-chev { color:#8a97ad; font-size:0.9em; flex:0 0 auto; }
 </style>
 </head>
 <body>
@@ -84,19 +96,13 @@ body { font-family:'Noto Sans KR',-apple-system,sans-serif; background:linear-gr
 
 <!-- 대시보드 -->
 <div id="dashboardView" class="view">
-  <div class="card">
-    <h2 class="section-title">📍 내 코스 목록</h2>
-    <div class="input-field" style="margin-bottom:16px;">
-      <input type="text" id="courseSearch" placeholder="🔍 코스 검색 (예: 엘리시안, H1cc...)" oninput="renderDashboard()" style="padding:12px; border:2px solid #2a5298; border-radius:8px; font-size:1em;">
+  <div class="dash-sticky">
+    <div style="display:flex; gap:8px; align-items:center;">
+      <input type="text" id="courseSearch" placeholder="🔍 코스 검색" oninput="renderDashboard()" style="flex:1; padding:10px; border:2px solid #2a5298; border-radius:8px; font-size:0.95em;">
+      <button class="btn btn-primary" style="margin:0; padding:10px 14px; white-space:nowrap;" onclick="openAddCourse()">+ 코스</button>
     </div>
-    <div id="courseList"></div>
-    <div class="button-group"><button class="btn btn-primary" onclick="openAddCourse()">+ 새 코스 추가</button></div>
   </div>
-  <div class="card">
-    <h2 class="section-title">⛰️ 경사지 공략 가이드</h2>
-    <p style="color:#666; font-size:0.9em; margin-bottom:14px;">페어웨이·어프로치에서 만나는 4가지 경사지 상황별 공략법이에요. 탭하면 펼쳐집니다.</p>
-    <div id="slopeGuide"></div>
-  </div>
+  <div id="courseList"></div>
 </div>
 
 <!-- 코스 추가/수정 -->
@@ -370,25 +376,40 @@ function renderDashboard() {
     const mapHoles = c.holes.filter(h=>h.map);
     let thumb = '';
     if(mapHoles.length){
-      thumb = `<div style="display:flex;gap:5px;overflow-x:auto;margin:8px 0;padding-bottom:4px;">`+
-        mapHoles.slice(0,6).map(h=>`<img src="${h.map}" style="height:56px;border-radius:5px;flex:0 0 auto;border:1px solid #dde;">`).join('')+
-        (mapHoles.length>6?`<span style="align-self:center;font-size:0.75em;color:#888;">+${mapHoles.length-6}</span>`:'')+`</div>`;
+      thumb = `<div style="display:flex;gap:5px;overflow-x:auto;margin:10px 0 4px;padding-bottom:4px;">`+
+        mapHoles.map(h=>`<img src="${h.map}" style="height:64px;border-radius:5px;flex:0 0 auto;border:1px solid #dde;">`).join('')+`</div>`;
     }
+    const recInline = recs.length>0 ? ` · 베스트 ${Math.min(...recs.map(r=>r.total||999))}타` : '';
     return `
     <div class="course-card">
-      <h3>${c.name}</h3>
-      <p>${c.holes.length}홀 · Par ${c.holes.reduce((s,h)=>s+Number(h.par||0),0)} · 홀맵 ${mapHoles.length}개</p>
-      ${thumb}
-      ${recHtml}
-      <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
-        <button class="btn btn-secondary" style="padding:6px 12px; font-size:0.85em;" onclick="editCourse('${c.id}')">✏️ 수정</button>
-        <button class="btn btn-danger" style="padding:6px 12px; font-size:0.85em;" onclick="deleteCourse('${c.id}')">🗑️ 삭제</button>
-        <button class="btn btn-primary" style="padding:6px 12px; font-size:0.85em;" onclick="startRound('${c.id}')">▶️ 라운드</button>
-        <button class="btn btn-secondary" style="padding:6px 12px; font-size:0.85em;" onclick="openHoleTable('${c.id}')">📊 홀별 기록</button>
-        <button class="btn btn-secondary" style="padding:6px 12px; font-size:0.85em;" onclick="openAnalysis('${c.id}')">📈 분석</button>
+      <div class="cc-head" onclick="toggleCourseCard('${c.id}')">
+        <div>
+          <h3 style="margin:0;">${c.name}</h3>
+          <p style="margin:3px 0 0;">${c.holes.length}홀 · Par ${c.holes.reduce((s,h)=>s+Number(h.par||0),0)} · 🗺️${mapHoles.length}${recInline}</p>
+        </div>
+        <span class="cc-chev" id="chev_${c.id}">▾ 펼치기</span>
+      </div>
+      <div style="margin-top:10px; display:flex; gap:6px; flex-wrap:wrap;">
+        <button class="btn btn-primary" style="padding:7px 14px; font-size:0.85em;" onclick="startRound('${c.id}')">▶️ 라운드</button>
+        <button class="btn btn-secondary" style="padding:7px 12px; font-size:0.85em;" onclick="openHoleTable('${c.id}')">📊 기록</button>
+        <button class="btn btn-secondary" style="padding:7px 12px; font-size:0.85em;" onclick="openAnalysis('${c.id}')">📈 분석</button>
+      </div>
+      <div id="ccbody_${c.id}" style="display:none;">
+        ${mapHoles.length?`<div style="font-size:0.78em;color:#888;margin-top:10px;">🗺️ 홀맵 ${mapHoles.length}개</div>`:''}
+        ${thumb}
+        ${recHtml}
+        <div style="margin-top:10px; display:flex; gap:6px; flex-wrap:wrap;">
+          <button class="btn btn-secondary" style="padding:6px 12px; font-size:0.82em;" onclick="editCourse('${c.id}')">✏️ 수정</button>
+          <button class="btn btn-danger" style="padding:6px 12px; font-size:0.82em;" onclick="deleteCourse('${c.id}')">🗑️ 삭제</button>
+        </div>
       </div>
     </div>`;
   }).join('');
+}
+function toggleCourseCard(id){
+  const b=document.getElementById('ccbody_'+id); const ch=document.getElementById('chev_'+id);
+  if(!b)return; const open=b.style.display!=='none';
+  b.style.display=open?'none':'block'; if(ch) ch.textContent=open?'▾ 펼치기':'▴ 접기';
 }
 
 function openAnalysis(courseId){
@@ -1385,7 +1406,18 @@ ${notes?`<h2 style="font-size:1.4em;color:#1e3a5f;margin-bottom:16px;padding-bot
 <div style="background:#f8f9fa;padding:18px;text-align:center;color:#999;font-size:0.85em;">⛳ 골프 라운드 기록 | ${date}</div></div>`;
 }
 function copyCode(){ navigator.clipboard.writeText(document.getElementById('codeOut').textContent).then(()=>{const m=document.getElementById('copyMsg');m.style.display='block';setTimeout(()=>m.style.display='none',3000);}); }
-function show(id){ document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); document.getElementById(id).classList.add('active'); window.scrollTo(0,0); }
+function show(id){ document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); document.getElementById(id).classList.add('active'); window.scrollTo(0,0); updateNav(id); }
+// ===== 경사 가이드 모달 =====
+function openSlopeModal(){ renderSlopeGuide(); document.getElementById('slopeModal').style.display='block'; }
+function closeSlopeModal(){ document.getElementById('slopeModal').style.display='none'; }
+// ===== 하단 네비게이션 =====
+function navRound(){ if(current && current.course){ show('inputView'); } else { show('dashboardView'); } }
+function updateNav(id){
+  const v = id || (document.querySelector('.view.active')||{}).id || 'dashboardView';
+  const map = { dashboardView:'코스', prepView:'라운드', inputView:'라운드', postView:'라운드', exportView:'라운드' };
+  const active = map[v] || '';
+  document.querySelectorAll('.bottom-nav button').forEach(b=>{ b.classList.toggle('active', b.dataset.nav===active); });
+}
 
 // 경사지 공략 가이드
 const SLOPE_GUIDE = [
@@ -1469,6 +1501,24 @@ renderSlopeGuide();
     <div id="clubModalBody"></div>
     <button class="btn btn-success" style="width:100%;margin-top:14px;" onclick="closeClubSettings(); if(current.course && document.getElementById('prepView').classList.contains('active')) renderPrep();">완료</button>
   </div>
+</div>
+
+<!-- 경사지 공략 가이드 모달 -->
+<div id="slopeModal" class="modal-ov">
+  <div class="modal-box">
+    <span class="modal-close" onclick="closeSlopeModal()">✕</span>
+    <h3 style="margin:0 0 4px;color:#1e3c72;font-size:1.1em;">⛰️ 경사지 공략 가이드</h3>
+    <p style="color:#666;font-size:0.82em;margin:0 0 12px;">4가지 경사 상황별 공략법. 탭하면 펼쳐집니다. (라운드 중에도 하단 📐 버튼으로 바로 열기)</p>
+    <div id="slopeGuide"></div>
+  </div>
+</div>
+
+<!-- 하단 네비게이션 바 -->
+<div class="bottom-nav">
+  <button data-nav="코스" onclick="show('dashboardView')"><span class="ic">🏠</span>코스</button>
+  <button data-nav="라운드" onclick="navRound()"><span class="ic">⛳</span>라운드</button>
+  <button data-nav="경사" onclick="openSlopeModal()"><span class="ic">📐</span>경사</button>
+  <button data-nav="설정" onclick="openClubSettings()"><span class="ic">⚙️</span>내 클럽</button>
 </div>
 </body>
 </html>
