@@ -1446,7 +1446,8 @@ const SLOPE_LIES = [
       '공이 왼쪽으로 잘 빠짐 → 핀보다 <b>오른쪽</b> 보고 굴리기',
       '로프트 큰 클럽(SW/AW)으로 부드럽게, 큰 스윙 금지',
       '끝까지 자세 유지하며 쓸어 치기'
-    ]
+    ],
+    pro:['평소대로 어드레스를 한 후 서기','무릎 피기','그냥 휘두르기']
   },
   {
     key:'toedown', icon:'🦶', title:'발끝 내리막 (공이 발보다 낮음)', color:'#c62828',
@@ -1472,7 +1473,8 @@ const SLOPE_LIES = [
       '공이 오른쪽으로 잘 빠짐 → 핀보다 <b>왼쪽</b> 겨냥',
       '뒤땅/토핑 주의 → 작고 또렷한 스윙으로 정확히 맞히기',
       '욕심내지 말고 그린 중앙으로 안전하게'
-    ]
+    ],
+    pro:['체중 뒤쪽에 싣고 기마 자세처럼 앉기','왼발 뒤로 빼기','평소 치듯이 치기']
   },
   {
     key:'uphill', icon:'📈', title:'왼발 오르막 (오르막 라이)', color:'#1565c0',
@@ -1496,7 +1498,8 @@ const SLOPE_LIES = [
       '체중 낮은 발(오른발), 어깨를 경사와 나란히',
       '경사면 따라 부드럽게 올려 치기',
       '감속 금지 — 끝까지 가속해서 공 띄우기'
-    ]
+    ],
+    pro:['공 가운데 놓고 셋업','상체 수직으로 유지','열린 헤드 닫기','오른발에 공 위치 맞추기','피니시에서 들지 말고 박기']
   },
   {
     key:'downhill', icon:'📉', title:'왼발 내리막 (내리막 라이)', color:'#6a1b9a',
@@ -1521,7 +1524,8 @@ const SLOPE_LIES = [
       '로프트 큰 클럽(SW)으로, 착지 지점을 핀보다 <b>짧게</b> 계산',
       '체중 앞발(왼발)에 두고 경사 따라 내려 치기',
       '퍼올리지 말 것 — 감속하면 뒤땅. 끝까지 쓸어내리기'
-    ]
+    ],
+    pro:['공 가운데 놓고 셋업','백스윙한 뒤 내리기','열린 헤드 닫기','오른발에 공 위치 맞추기','빈 스윙 후 치기']
   }
 ];
 const SLOPE_CATS = [
@@ -1552,6 +1556,12 @@ function renderSlopeGuide(){
               <ul style="margin:0;padding-left:20px;color:#444;font-size:0.88em;line-height:1.7;">
                 ${s[cat.field].map(t=>`<li>${t}</li>`).join('')}
               </ul>
+              ${(s.pro&&s.pro.length)?`<div style="margin-top:10px;background:#fff8e6;border:1px solid #ffe0a3;border-radius:8px;padding:10px 12px;">
+                <div style="font-weight:700;color:#b26a00;font-size:0.84em;margin-bottom:5px;">🎯 박하림프로 공식</div>
+                <ol style="margin:0;padding-left:18px;color:#5a4a2a;font-size:0.85em;line-height:1.75;">
+                  ${s.pro.map(p=>`<li>${p}</li>`).join('')}
+                </ol>
+              </div>`:''}
             </div>
           </div>`;
         }).join('')}
